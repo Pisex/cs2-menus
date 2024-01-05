@@ -37,6 +37,8 @@ public:
 	uintptr_t        GetModuleBase(void) const;
 	std::string_view GetModuleName(void) const;
 
+	static std::pair<std::vector<uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput);
+
 private:
 	void Init();
 	void LoadSections();

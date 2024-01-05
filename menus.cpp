@@ -4,26 +4,77 @@
 
 Menus g_Menus;
 PLUGIN_EXPOSE(Menus, g_Menus);
+
+CGlobalVars* gpGlobals = nullptr;
 IVEngineServer2* engine = nullptr;
-IGameResourceServiceServer* g_pGameResourceService = nullptr;
-CGameEntitySystem* g_pGameEntitySystem = nullptr;
+CCSGameRules* g_pGameRules = nullptr;
 CEntitySystem* g_pEntitySystem = nullptr;
 CSchemaSystem* g_pCSchemaSystem = nullptr;
+IGameEventManager2* gameeventmanager = nullptr;
+CGameEntitySystem* g_pGameEntitySystem = nullptr;
+INetworkGameServer* g_pNetworkGameServer = nullptr;
+IGameResourceServiceServer* g_pGameResourceService = nullptr;
 
 std::map<uint32, MenuPlayer> g_MenuPlayer;
 
 MenusApi* g_pMenusApi = nullptr;
 IMenusApi* g_pMenusCore = nullptr;
 
+UtilsApi* g_pUtilsApi = nullptr;
+IUtilsApi* g_pUtilsCore = nullptr;
+
 class GameSessionConfiguration_t { };
+SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
+SH_DECL_HOOK2(IGameEventManager2, FireEvent, SH_NOATTRIB, 0, bool, IGameEvent*, bool);
+SH_DECL_HOOK2_void(IServerGameClients, ClientCommand, SH_NOATTRIB, 0, CPlayerSlot, const CCommand&);
 SH_DECL_HOOK3_void(ICvar, DispatchConCommand, SH_NOATTRIB, 0, ConCommandHandle, const CCommandContext&, const CCommand&);
 SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, int, const char *, uint64, const char *);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&, ISource2WorldSession*, const char*);
 
 void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
+void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
+
+void (*UTIL_StateChanged)(CNetworkTransmitComponent& networkTransmitComponent, CEntityInstance *ent, int64 offset, int16 a4, int16 a5) = nullptr;
+void (*UTIL_NetworkStateChanged)(int64 chainEntity, int64 offset, int64 a3) = nullptr;
+
+void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
+void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
+
+funchook_t* m_SayHook;
+funchook_t* m_SayTeamHook;
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
+}
+
+void SayTeamHook(const CCommandContext& ctx, CCommand& args)
+{
+	bool bCallback = true;
+	bCallback = g_pUtilsApi->SendChatListenerCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	if(args[1][0])
+	{
+		if(bCallback && containsOnlyDigits(std::string(args[1] + 1)))
+			bCallback = false;
+	}
+	if(bCallback)
+	{
+		UTIL_SayTeam(ctx, args);
+	}
+}
+
+void SayHook(const CCommandContext& ctx, CCommand& args)
+{
+	bool bCallback = true;
+	bCallback = g_pUtilsApi->SendChatListenerCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	if(args[1][0])
+	{
+		if(bCallback && containsOnlyDigits(std::string(args[1] + 1)))
+			bCallback = false;
+	}
+	if(bCallback)
+	{
+		UTIL_Say(ctx, args);
+	}
 }
 
 std::string Colorizer(std::string str)
@@ -42,29 +93,17 @@ std::string Colorizer(std::string str)
 	return str;
 }
 
-void ClientPrint(CBasePlayerController *player, int hud_dest, const char *msg, ...)
-{
-	va_list args;
-	va_start(args, msg);
-
-	char buf[256];
-	V_vsnprintf(buf, sizeof(buf), msg, args);
-	va_end(args);
-		
-	std::string colorizedBuf = Colorizer(buf);
-
-	if (player)
-		UTIL_ClientPrint(player, hud_dest, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
-	else
-		ConMsg("%s\n", buf);
-}
-
 void* Menus::OnMetamodQuery(const char* iface, int* ret)
 {
 	if (!strcmp(iface, Menus_INTERFACE))
 	{
 		*ret = META_IFACE_OK;
 		return g_pMenusCore;
+	}
+	if (!strcmp(iface, Utils_INTERFACE))
+	{
+		*ret = META_IFACE_OK;
+		return g_pUtilsCore;
 	}
 
 	*ret = META_IFACE_FAILED;
@@ -94,27 +133,135 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		return false;
 	}
 	
+	UTIL_ClientPrintAll = libserver.FindPatternSIMD(WIN_LINUX("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 70 01 2A 2A 8B E9", "55 48 89 E5 41 57 49 89 D7 41 56 49 89 F6 41 55 41 89 FD")).RCast< decltype(UTIL_ClientPrintAll) >();
+	if (!UTIL_ClientPrintAll)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_ClientPrintAll", sizeof(error));
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+
+	UTIL_SayTeam = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_SayTeam) >();
+	if (!UTIL_SayTeam)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_SayTeam", sizeof(error));
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+	m_SayTeamHook = funchook_create();
+	funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
+	funchook_install(m_SayTeamHook, 0);
+
+	UTIL_Say = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_Say) >();
+	if (!UTIL_Say)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_Say", sizeof(error));
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+	m_SayHook = funchook_create();
+	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
+	funchook_install(m_SayHook, 0);
+	
+	UTIL_StateChanged = libserver.FindPatternSIMD("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
+	if (!UTIL_StateChanged)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_StateChanged", maxlen);
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+
+	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("83 FF 07 0F 87 ? ? ? ? 55 89 FF 48 89 E5 41 56 41 55 41 54 49 89 F4 53 48 89 D3 48 8D 15 E5 C2 20 00").RCast< decltype(UTIL_NetworkStateChanged) >();
+	if (!UTIL_NetworkStateChanged)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_NetworkStateChanged", maxlen);
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+
 	g_SMAPI->AddListener( this, this );
 
+	gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 91>(g_pSource2Server));
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
+	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
+	SH_ADD_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
+	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
+
+	if (late)
+	{
+		g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
+		g_pEntitySystem = g_pGameEntitySystem;
+		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
+		gpGlobals = g_pNetworkGameServer->GetGlobals();
+	}
 
 	g_pMenusApi = new MenusApi();
 	g_pMenusCore = g_pMenusApi;
+
+	g_pUtilsApi = new UtilsApi();
+	g_pUtilsCore = g_pUtilsApi;
 
 	return true;
 }
 
 bool Menus::Unload(char *error, size_t maxlen)
 {
-	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
-	SH_REMOVE_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_REMOVE_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
+	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
+	SH_REMOVE_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
+	SH_REMOVE_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
+	SH_REMOVE_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
+	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
+
+	funchook_destroy(m_SayHook);
+	funchook_destroy(m_SayTeamHook);
 
 	ConVar_Unregister();
 	
 	return true;
+}
+
+bool Menus::FireEvent(IGameEvent* pEvent, bool bDontBroadcast)
+{
+    if (!pEvent) {
+        RETURN_META_VALUE(MRES_IGNORED, false);
+    }
+
+    const char* szName = pEvent->GetName();
+	g_pUtilsApi->SendHookEventCallback(szName, pEvent, bDontBroadcast);
+    RETURN_META_VALUE(MRES_IGNORED, true);
+}
+
+void Menus::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
+{
+	if(!g_pGameRules)
+	{
+		CCSGameRulesProxy* pGameRulesProxy = static_cast<CCSGameRulesProxy*>(UTIL_FindEntityByClassname("cs_gamerules"));
+		if (pGameRulesProxy)
+		{
+			g_pGameRules = pGameRulesProxy->m_pGameRules();
+			if(g_pGameRules) g_pUtilsApi->SendHookGameRules();
+		}
+	}
+	g_pUtilsApi->NextFrame();
+}
+
+void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
+{
+	bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), slot.Get(), args.ArgS());
+	if(bFound) RETURN_META(MRES_SUPERCEDE);
 }
 
 void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandContext& ctx, const CCommand& args)
@@ -135,28 +282,25 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 
 		if (bCommand)
 		{
-			char *pszMessage = (char *)(args.ArgS() + 2);
-			CCommand arg;
-			arg.Tokenize(args.ArgS() + 2);
-			if(arg[0][0])
+			if(args[1][0])
 			{
-				if(containsOnlyDigits(std::string(arg[0])))
+				if(containsOnlyDigits(std::string(args.Arg(1)+1)))
 				{
 					auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
 					auto& hMenu = hMenuPlayer.hMenu;
 					if(hMenuPlayer.bEnabled)
 					{
-						int iButton = std::stoi(arg[0]);
+						int iButton = std::stoi(args[1]+1);
 						if(iButton == 9 && hMenu.bExit)
 						{
 							hMenuPlayer.iList = 0;
 							hMenuPlayer.bEnabled = false;
-							hMenuPlayer.hMenu = Menu();
 							for (size_t i = 0; i < 8; i++)
 							{
-								ClientPrint(pController, 5, " \x08-\x01");
+								g_pUtilsCore->PrintToChat(iCommandPlayerSlot.Get(), " \x08-\x01");
 							}
-							if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9);
+							if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iCommandPlayerSlot.Get());
+							hMenuPlayer.hMenu = Menu();
 						}
 						else if(iButton == 8)
 						{
@@ -165,32 +309,37 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 							if(iItems > hMenuPlayer.iList+1)
 							{
 								hMenuPlayer.iList++;
-								g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get());
-								if(hMenu.hFunc) hMenu.hFunc("next", "next", 8);
+								g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get(), false);
+								if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iCommandPlayerSlot.Get());
 							}
 						}
 						else if(iButton == 7)
 						{
-							if(hMenuPlayer.iList != 0)
+							if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
 							{
-								hMenuPlayer.iList--;
-								g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get());
-								if(hMenu.hFunc) hMenu.hFunc("back", "back", 7);
+								if(hMenuPlayer.iList != 0)
+								{
+									hMenuPlayer.iList--;
+									g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get(), false);
+								}
+								else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iCommandPlayerSlot.Get());
 							}
 						}
 						else
 						{
 							int iItem = hMenuPlayer.iList*5+iButton-1;
-							if(hMenu.hItems.size() <= iItem) return;
-							if(hMenu.hItems[iItem].iType != 1) return;
-							if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iItem);
+							if(hMenu.hItems.size() <= iItem) RETURN_META(MRES_SUPERCEDE);
+							if(hMenu.hItems[iItem].iType != 1) RETURN_META(MRES_SUPERCEDE);
+							if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iCommandPlayerSlot.Get());
 						}
+						RETURN_META(MRES_SUPERCEDE);
 					}
 				}
 			}
-
-			RETURN_META(MRES_SUPERCEDE);
 		}
+
+		if(args[1][0])
+			g_pUtilsApi->FindAndSendCommandCallback(args.Arg(1), ctx.GetPlayerSlot().Get(), args.ArgS());
 	}
 	SH_CALL(g_pCVar, &ICvar::DispatchConCommand)(cmdHandle, ctx, args);
 }
@@ -202,7 +351,12 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 	{
 		g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
 		g_pEntitySystem = g_pGameEntitySystem;
+
+		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
+		gpGlobals = g_pNetworkGameServer->GetGlobals();
+
 		bDone = true;
+		g_pUtilsApi->SendHookStartup();
 	}
 }
 
@@ -243,7 +397,7 @@ void MenusApi::SetExitMenu(Menu& hMenu, bool bExit)
 	hMenu.bExit = bExit;
 }
 
-void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot)
+void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 {
 	CCSPlayerController* pPlayer = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
 	if (!pPlayer)
@@ -252,7 +406,7 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot)
 	if (m_steamID == 0)
 		return;
 	MenuPlayer& hMenuPlayer = g_MenuPlayer[m_steamID];
-	if (hMenuPlayer.bEnabled) {
+	if (hMenuPlayer.bEnabled && bClose) {
 		hMenuPlayer.iList = 0;
 		hMenuPlayer.bEnabled = false;
 	}
@@ -261,21 +415,21 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot)
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
 	}
-	char sBuff[64] = "\0";
+	char sBuff[128] = "\0";
 	int iCount = 0;
 	int iItems = size(hMenu.hItems) / 5;
 	if (size(hMenu.hItems) % 5 > 0) iItems++;
-	ClientPrint(pPlayer, 5, hMenu.szTitle.c_str());
+	g_pUtilsCore->PrintToChat(iSlot, hMenu.szTitle.c_str());
 	for (size_t l = hMenuPlayer.iList*5; l < hMenu.hItems.size(); ++l) {
 		switch (hMenu.hItems[l].iType)
 		{
 			case 1:
 				g_SMAPI->Format(sBuff, sizeof(sBuff), " \x04[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
-				ClientPrint(pPlayer, 5, sBuff);
+				g_pUtilsCore->PrintToChat(iSlot, sBuff);
 				break;
 			case 2:
 				g_SMAPI->Format(sBuff, sizeof(sBuff), " \x08[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
-				ClientPrint(pPlayer, 5, sBuff);
+				g_pUtilsCore->PrintToChat(iSlot, sBuff);
 				break;
 		}
 		iCount++;
@@ -287,12 +441,12 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot)
 			{
 				for (size_t i = 0; i < iC-iCount; i++)
 				{
-					ClientPrint(pPlayer, 5, " \x08-\x01");
+					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
 				}
 			}
-			if(hMenuPlayer.iList > 0 || hMenu.bBack) ClientPrint(pPlayer, 5, " \x08[!7]\x01 ← Назад");
-			if(iItems > hMenuPlayer.iList+1) ClientPrint(pPlayer, 5, "  \x08[!8]\x01 → Вперёд");
-			ClientPrint(pPlayer, 5, "  \x07[!9]\x01 Выход");
+			if(hMenuPlayer.iList > 0 || hMenu.bBack) g_pUtilsCore->PrintToChat(iSlot, " \x08[!7]\x01 ← Назад");
+			if(iItems > hMenuPlayer.iList+1) g_pUtilsCore->PrintToChat(iSlot, "  \x08[!8]\x01 → Вперёд");
+			g_pUtilsCore->PrintToChat(iSlot, "  \x07[!9]\x01 Выход");
 			break;
 		}
 	}
@@ -308,6 +462,104 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 		hItem.sText = std::string(sText);
 		hMenu.hItems.push_back(hItem);
 	}
+}
+
+void MenusApi::ClosePlayerMenu(int iSlot)
+{
+	CCSPlayerController* pPlayer = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	if (!pPlayer)
+		return;
+	uint32 m_steamID = pPlayer->m_steamID();
+	if (m_steamID == 0)
+		return;
+	MenuPlayer& hMenuPlayer = g_MenuPlayer[m_steamID];
+	if (hMenuPlayer.bEnabled) {
+		hMenuPlayer.iList = 0;
+		hMenuPlayer.bEnabled = false;
+		hMenuPlayer.hMenu = Menu();
+	}
+}
+
+void UtilsApi::PrintToChatAll(const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	std::string colorizedBuf = Colorizer(buf);
+	UTIL_ClientPrintAll(3, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+}
+
+void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
+	{
+		ConMsg("%s\n", buf);
+		return;
+	}
+
+	std::string colorizedBuf = Colorizer(buf);
+
+	g_pUtilsApi->NextFrame([pPlayerController, colorizedBuf](){
+		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
+			UTIL_ClientPrint(pPlayerController, 3, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+	});
+}
+
+void UtilsApi::NextFrame(std::function<void()> fn)
+{
+	m_nextFrame.push_back(fn);
+}
+
+CCSGameRules* UtilsApi::GetCCSGameRules()
+{
+	return g_pGameRules;
+}
+
+CGameEntitySystem* UtilsApi::GetCGameEntitySystem()
+{
+	return g_pGameEntitySystem;
+}
+
+CEntitySystem* UtilsApi::GetCEntitySystem()
+{
+	return g_pEntitySystem;
+}
+
+CGlobalVars* UtilsApi::GetCGlobalVars()
+{
+	return gpGlobals;
+}
+
+IGameEventManager2* UtilsApi::GetGameEventManager()
+{
+	return gameeventmanager;
+}
+
+void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
+{
+	SC_CBaseEntity* CEntity = (SC_CBaseEntity*)entity;
+	int offset = g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName);
+	int chainOffset = g_pCSchemaSystem->GetServerOffset(sClassName, "__m_pChainEntity");
+	if (chainOffset != -1)
+	{
+		UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+		return;
+	}
+	UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+	CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+	CEntity->m_isSteadyState().ClearAll();
 }
 
 ///////////////////////////////////////
@@ -328,7 +580,7 @@ const char* Menus::GetDate()
 
 const char *Menus::GetLogTag()
 {
-	return "Menus";
+	return "GameUtils";
 }
 
 const char* Menus::GetAuthor()
@@ -338,12 +590,12 @@ const char* Menus::GetAuthor()
 
 const char* Menus::GetDescription()
 {
-	return "[Menus] Core";
+	return "Game Utils";
 }
 
 const char* Menus::GetName()
 {
-	return "[Menus] Core";
+	return "Game Utils";
 }
 
 const char* Menus::GetURL()

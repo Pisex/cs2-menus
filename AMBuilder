@@ -16,8 +16,21 @@ for sdk_name in MMSPlugin.sdks:
     binary = MMSPlugin.HL2Library(builder, cxx, MMSPlugin.plugin_name, sdk)
 
     binary.compiler.cxxincludes += [
+      os.path.join(builder.currentSourcePath, 'funchook', 'include'),
       os.path.join(builder.sourcePath, 'include'),
     ]
+
+    if binary.compiler.target.platform == 'linux':
+      binary.compiler.postlink += [
+        os.path.join(builder.sourcePath, 'funchook', 'lib', 'libfunchook.a'),
+        os.path.join(builder.sourcePath, 'funchook', 'lib', 'libdistorm.a'),
+      ]
+    elif binary.compiler.target.platform == 'windows':
+      binary.compiler.postlink += [
+        os.path.join('psapi.lib'),
+        os.path.join(builder.sourcePath, 'funchook', 'lib', 'funchook.lib'),
+        os.path.join(builder.sourcePath, 'funchook', 'lib', 'distorm.lib'),
+      ]
 
     binary.sources += [
       'menus.cpp',

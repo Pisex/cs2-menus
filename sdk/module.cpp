@@ -13,7 +13,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 // For converting a string pattern with wildcards to an array of bytes and mask.
-std::pair<std::vector<uint8_t>, std::string> PatternToMaskedBytes(const std::string_view svInput)
+std::pair<std::vector<uint8_t>, std::string> CModule::PatternToMaskedBytes(const std::string_view svInput)
 {
 	char* pszPatternStart = const_cast<char*>(svInput.data());
 	char* pszPatternEnd = pszPatternStart + svInput.size();

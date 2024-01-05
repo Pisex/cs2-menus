@@ -17,6 +17,8 @@ inline CEntityInstance* UTIL_FindEntityByClassname(const char* name)
 	return nullptr;
 }
 
+class CNetworkTransmitComponent {};
+
 class SC_CBaseEntity : public CBaseEntity
 {
 public:
@@ -25,4 +27,7 @@ public:
 	SCHEMA_FIELD(uint8_t, CBaseEntity, m_iTeamNum);
 	SCHEMA_FIELD(LifeState_t, CBaseEntity, m_lifeState);
 	SCHEMA_FIELD(float, CBaseEntity, m_flGravityScale);
+	SCHEMA_FIELD(float, CBaseEntity, m_lastNetworkChange);
+	SCHEMA_FIELD(CBitVec<64>, CBaseEntity, m_isSteadyState);
+	SCHEMA_FIELD(CNetworkTransmitComponent, CBaseEntity, m_NetworkTransmitComponent);
 };
