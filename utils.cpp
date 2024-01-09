@@ -390,8 +390,6 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 
 		bDone = true;
 		g_pUtilsApi->SendHookStartup();
-
-		g_pUtilsApi->SetStateChanged(nullptr, "CCSPlayerController", "m_pInventoryServices", 0);
 	}
 }
 
