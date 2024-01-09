@@ -167,7 +167,6 @@ public:
 				bFound = true;
 			}
 		}
-		Msg("DEBUG COMMAND: %s | %i\n", szCommand, bFound);
 		return bFound;
 	}
 	

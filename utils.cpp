@@ -602,7 +602,6 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 		CEntity->m_lastNetworkChange() = gpGlobals->curtime;
 		CEntity->m_isSteadyState().ClearAll();
 	}
-	else Msg("DEBUG: %i\n", g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName));
 }
 
 ///////////////////////////////////////
