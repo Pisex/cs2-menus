@@ -1,0 +1,18 @@
+"Phrases"
+{
+	"Back"
+	{
+		"ru"		" {GRAY}[!7]{DEFAULT} ← Назад"
+		"en"		" {GRAY}[!7]{DEFAULT} ← Back"
+	}
+	"Next"
+	{
+		"ru"		" {GRAY}[!8]{DEFAULT} → Вперёд"
+		"en"		" {GRAY}[!8]{DEFAULT} → Next"
+	}
+	"Exit"
+	{
+		"ru"		" {LIGHTRED}[!9]{DEFAULT} Выход"
+		"en"		" {LIGHTRED}[!9]{DEFAULT} Exit"
+	}
+}

@@ -33,7 +33,7 @@ for sdk_name in MMSPlugin.sdks:
       ]
 
     binary.sources += [
-      'menus.cpp',
+      'utils.cpp',
       os.path.join('sdk', 'schemasystem.cpp'),
       os.path.join('sdk', 'module.cpp'),
       os.path.join('sdk', 'memaddr.cpp')

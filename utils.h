@@ -78,6 +78,8 @@ public:
     CEntitySystem* GetCEntitySystem();
 	CGlobalVars* GetCGlobalVars();
 	IGameEventManager2* GetGameEventManager();
+
+	const char* GetLanguage();
 	
 	void StartupServer(SourceMM::PluginId id, StartupCallback fn) override {
 		StartupHook[id].push_back(fn);

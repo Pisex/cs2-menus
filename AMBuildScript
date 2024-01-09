@@ -125,12 +125,12 @@ class MMSPluginConfig(object):
     if builder.options.plugin_name is not None:
       self.plugin_name = builder.options.plugin_name
     else:
-      self.plugin_name = 'menus'
+      self.plugin_name = 'utils'
 
     if builder.options.plugin_alias is not None:
       self.plugin_alias = builder.options.plugin_alias
     else:
-      self.plugin_alias = 'menus'
+      self.plugin_alias = 'utils'
 
     if builder.options.targets:
       target_archs = builder.options.targets.split(',')

@@ -30,6 +30,9 @@ public:
     virtual CEntitySystem* GetCEntitySystem() = 0;
 	virtual CGlobalVars* GetCGlobalVars() = 0;
 	virtual IGameEventManager2* GetGameEventManager() = 0;
+
+    virtual const char* GetLanguage() = 0;
+
     virtual void StartupServer(SourceMM::PluginId id, StartupCallback fn) = 0;
     virtual void OnGetGameRules(SourceMM::PluginId id, StartupCallback fn) = 0;
 

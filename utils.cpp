@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "menus.h"
+#include "utils.h"
 #include "metamod_oslink.h"
 
 Menus g_Menus;
@@ -17,11 +17,15 @@ IGameResourceServiceServer* g_pGameResourceService = nullptr;
 
 std::map<uint32, MenuPlayer> g_MenuPlayer;
 
+std::map<std::string, std::string> g_vecPhrases;
+
 MenusApi* g_pMenusApi = nullptr;
 IMenusApi* g_pMenusCore = nullptr;
 
 UtilsApi* g_pUtilsApi = nullptr;
 IUtilsApi* g_pUtilsCore = nullptr;
+
+char szLanguage[16];
 
 class GameSessionConfiguration_t { };
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
@@ -117,6 +121,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pCVar, ICvar, CVAR_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetEngineFactory, g_pCSchemaSystem, CSchemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
+	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetServerFactory, g_pSource2Server, ISource2Server, SOURCE2SERVER_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameClients, IServerGameClients, SOURCE2GAMECLIENTS_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
@@ -206,6 +211,29 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
 		gpGlobals = g_pNetworkGameServer->GetGlobals();
 	}
+
+	KeyValues::AutoDelete g_kvCore("Core");
+	const char *pszPath = "addons/configs/core.cfg";
+
+	if (!g_kvCore->LoadFromFile(g_pFullFileSystem, pszPath))
+	{
+		Warning("Failed to load %s\n", pszPath);
+		return false;
+	}
+
+	g_SMAPI->Format(szLanguage, sizeof(szLanguage), "%s", g_kvCore->GetString("ServerLang", "en"));
+	
+	KeyValues::AutoDelete g_kvPhrasesRanks("Phrases");
+	const char *pszPath2 = "addons/translations/menus.phrases.txt";
+
+	if (!g_kvPhrasesRanks->LoadFromFile(g_pFullFileSystem, pszPath2))
+	{
+		Warning("Failed to load %s\n", pszPath2);
+		return false;
+	}
+
+	for (KeyValues *pKey = g_kvPhrasesRanks->GetFirstTrueSubKey(); pKey; pKey = pKey->GetNextTrueSubKey())
+		g_vecPhrases[std::string(pKey->GetName())] = std::string(pKey->GetString(szLanguage));
 
 	g_pMenusApi = new MenusApi();
 	g_pMenusCore = g_pMenusApi;
@@ -339,7 +367,12 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 		}
 
 		if(args[1][0])
-			g_pUtilsApi->FindAndSendCommandCallback(args.Arg(1), ctx.GetPlayerSlot().Get(), args.ArgS());
+		{
+			char *pszMessage = (char *)(args.ArgS() + 1);
+			CCommand arg;
+			arg.Tokenize(pszMessage);
+			g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage);
+		}
 	}
 	SH_CALL(g_pCVar, &ICvar::DispatchConCommand)(cmdHandle, ctx, args);
 }
@@ -357,6 +390,8 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 
 		bDone = true;
 		g_pUtilsApi->SendHookStartup();
+
+		g_pUtilsApi->SetStateChanged(nullptr, "CCSPlayerController", "m_pInventoryServices", 0);
 	}
 }
 
@@ -444,9 +479,9 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
 				}
 			}
-			if(hMenuPlayer.iList > 0 || hMenu.bBack) g_pUtilsCore->PrintToChat(iSlot, " \x08[!7]\x01 ← Назад");
-			if(iItems > hMenuPlayer.iList+1) g_pUtilsCore->PrintToChat(iSlot, "  \x08[!8]\x01 → Вперёд");
-			g_pUtilsCore->PrintToChat(iSlot, "  \x07[!9]\x01 Выход");
+			if(hMenuPlayer.iList > 0 || hMenu.bBack) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Back")].c_str());
+			if(iItems > hMenuPlayer.iList+1) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Next")].c_str());
+			g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Exit")].c_str());
 			break;
 		}
 	}
@@ -547,19 +582,29 @@ IGameEventManager2* UtilsApi::GetGameEventManager()
 	return gameeventmanager;
 }
 
+const char* UtilsApi::GetLanguage()
+{
+	return szLanguage;
+}
+
 void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
 {
-	SC_CBaseEntity* CEntity = (SC_CBaseEntity*)entity;
-	int offset = g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName);
-	int chainOffset = g_pCSchemaSystem->GetServerOffset(sClassName, "__m_pChainEntity");
-	if (chainOffset != -1)
+	if(entity)
 	{
-		UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
-		return;
+		SC_CBaseEntity* CEntity = (SC_CBaseEntity*)entity;
+		int offset = g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName);
+		
+		int chainOffset = g_pCSchemaSystem->GetServerOffset(sClassName, "__m_pChainEntity");
+		if (chainOffset != -1)
+		{
+			UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+			return;
+		}
+		UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+		CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+		CEntity->m_isSteadyState().ClearAll();
 	}
-	UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
-	CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-	CEntity->m_isSteadyState().ClearAll();
+	else Msg("DEBUG: %i\n", g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName));
 }
 
 ///////////////////////////////////////
