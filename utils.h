@@ -157,7 +157,7 @@ public:
 	}
 
 	bool SendChatListenerPostCallback(int iSlot, const char* szContent, bool bMute) {
-		bool bFound = true;
+		bool bFound = bMute;
 		for(auto& item : ChatHookPost)
 		{
 			for (auto& callback : item.second) {
