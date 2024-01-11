@@ -54,12 +54,17 @@ bool containsOnlyDigits(const std::string& str) {
 void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 {
 	bool bCallback = true;
-	bCallback = g_pUtilsApi->SendChatListenerCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
 	if(args[1][0])
 	{
-		if(bCallback && containsOnlyDigits(std::string(args[1] + 1)))
-			bCallback = false;
+		if(g_pEntitySystem)
+		{
+			auto pController = (CCSPlayerController*)g_pEntitySystem->GetBaseEntity((CEntityIndex)(ctx.GetPlayerSlot().Get() + 1));
+			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
+				bCallback = false;
+		}
 	}
+	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback);
 	if(bCallback)
 	{
 		UTIL_SayTeam(ctx, args);
@@ -69,12 +74,17 @@ void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 void SayHook(const CCommandContext& ctx, CCommand& args)
 {
 	bool bCallback = true;
-	bCallback = g_pUtilsApi->SendChatListenerCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
 	if(args[1][0])
 	{
-		if(bCallback && containsOnlyDigits(std::string(args[1] + 1)))
-			bCallback = false;
+		if(g_pEntitySystem)
+		{
+			auto pController = (CCSPlayerController*)g_pEntitySystem->GetBaseEntity((CEntityIndex)(ctx.GetPlayerSlot().Get() + 1));
+			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
+				bCallback = false;
+		}
 	}
+	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback);
 	if(bCallback)
 	{
 		UTIL_Say(ctx, args);
@@ -310,15 +320,18 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 
 		if (bCommand)
 		{
-			if(args[1][0])
+			char *pszMessage = (char *)(args.ArgS() + 2);
+			CCommand arg;
+			arg.Tokenize(args.ArgS() + 2);
+			if(arg[0][0])
 			{
-				if(containsOnlyDigits(std::string(args.Arg(1)+1)))
+				if(containsOnlyDigits(std::string(arg[0])))
 				{
 					auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
 					auto& hMenu = hMenuPlayer.hMenu;
 					if(hMenuPlayer.bEnabled)
 					{
-						int iButton = std::stoi(args[1]+1);
+						int iButton = std::stoi(arg[0]);
 						if(iButton == 9 && hMenu.bExit)
 						{
 							hMenuPlayer.iList = 0;
@@ -366,7 +379,7 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			}
 		}
 
-		if(args[1][0])
+		if(std::string(args[1]).size() > 1)
 		{
 			char *pszMessage = (char *)(args.ArgS() + 1);
 			CCommand arg;
@@ -374,7 +387,6 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage);
 		}
 	}
-	SH_CALL(g_pCVar, &ICvar::DispatchConCommand)(cmdHandle, ctx, args);
 }
 
 void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
@@ -612,7 +624,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.0";
+	return "1.1";
 }
 
 const char* Menus::GetDate()

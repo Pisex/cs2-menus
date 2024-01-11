@@ -100,8 +100,12 @@ public:
 		}
     }
 
-	void AddChatListener(SourceMM::PluginId id, CommandCallback callback) override {
-        ChatHook[id].push_back(callback);
+	void AddChatListenerPre(SourceMM::PluginId id, CommandCallback callback) override {
+        ChatHookPre[id].push_back(callback);
+    }
+
+	void AddChatListenerPost(SourceMM::PluginId id, CommandCallbackPost callback) override {
+        ChatHookPost[id].push_back(callback);
     }
 
 	void HookEvent(SourceMM::PluginId id, const char* sName, EventCallback callback) override {
@@ -139,12 +143,25 @@ public:
 		}
 	}
 
-	bool SendChatListenerCallback(int iSlot, const char* szContent) {
+	bool SendChatListenerPreCallback(int iSlot, const char* szContent) {
 		bool bFound = true;
-		for(auto& item : ChatHook)
+		for(auto& item : ChatHookPre)
 		{
 			for (auto& callback : item.second) {
 				if (callback && !callback(iSlot, szContent)) {
+					bFound = false;
+				}
+			}
+		}
+		return bFound;
+	}
+
+	bool SendChatListenerPostCallback(int iSlot, const char* szContent, bool bMute) {
+		bool bFound = true;
+		for(auto& item : ChatHookPost)
+		{
+			for (auto& callback : item.second) {
+				if (callback && !callback(iSlot, szContent, bMute)) {
 					bFound = false;
 				}
 			}
@@ -174,7 +191,8 @@ public:
 		ConsoleCommands[id].clear();
 		ChatCommands[id].clear();
 		HookEvents[id].clear();
-		ChatHook[id].clear();
+		ChatHookPre[id].clear();
+		ChatHookPost[id].clear();
 		StartupHook[id].clear();
 		GetGameRules[id].clear();
 	}
@@ -189,7 +207,8 @@ public:
 private:
     std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
     std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
-    std::map<int, std::vector<CommandCallback>> ChatHook;
+    std::map<int, std::vector<CommandCallback>> ChatHookPre;
+    std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
 
     std::map<int, std::vector<StartupCallback>> StartupHook;
     std::map<int, std::vector<StartupCallback>> GetGameRules;
