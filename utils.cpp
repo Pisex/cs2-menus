@@ -391,18 +391,13 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 
 void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
 {
-	static bool bDone = false;
-	if (!bDone)
-	{
-		g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
-		g_pEntitySystem = g_pGameEntitySystem;
+	g_pGameRules = nullptr;
+	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
+	g_pEntitySystem = g_pGameEntitySystem;
 
-		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
-		gpGlobals = g_pNetworkGameServer->GetGlobals();
-
-		bDone = true;
-		g_pUtilsApi->SendHookStartup();
-	}
+	g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
+	gpGlobals = g_pNetworkGameServer->GetGlobals();
+	g_pUtilsApi->SendHookStartup();
 }
 
 void Menus::OnClientDisconnect(CPlayerSlot slot, int reason, const char *pszName, uint64 xuid, const char *pszNetworkID)
