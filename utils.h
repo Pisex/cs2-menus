@@ -8,6 +8,7 @@
 #include <iserver.h>
 #include <entity2/entitysystem.h>
 #include "igameevents.h"
+#include "entitysystem.h"
 #include "vector.h"
 #include <deque>
 #include <functional>
@@ -52,7 +53,7 @@ private: // Hooks
 	void GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*);
     void OnDispatchConCommand(ConCommandHandle cmd, const CCommandContext& ctx, const CCommand& args);
-	void OnClientDisconnect(CPlayerSlot slot, int reason, const char *pszName, uint64 xuid, const char *pszNetworkID);
+	void OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID );
 };
 
 class MenusApi : public IMenusApi {

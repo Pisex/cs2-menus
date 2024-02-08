@@ -15,6 +15,12 @@ CGameEntitySystem* g_pGameEntitySystem = nullptr;
 INetworkGameServer* g_pNetworkGameServer = nullptr;
 IGameResourceServiceServer* g_pGameResourceService = nullptr;
 
+CGameEntitySystem* GameEntitySystem()
+{
+	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
+	return g_pGameEntitySystem;
+}
+
 std::map<uint32, MenuPlayer> g_MenuPlayer;
 
 std::map<std::string, std::string> g_vecPhrases;
@@ -32,7 +38,7 @@ SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK2(IGameEventManager2, FireEvent, SH_NOATTRIB, 0, bool, IGameEvent*, bool);
 SH_DECL_HOOK2_void(IServerGameClients, ClientCommand, SH_NOATTRIB, 0, CPlayerSlot, const CCommand&);
 SH_DECL_HOOK3_void(ICvar, DispatchConCommand, SH_NOATTRIB, 0, ConCommandHandle, const CCommandContext&, const CCommand&);
-SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, int, const char *, uint64, const char *);
+SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64, const char *);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&, ISource2WorldSession*, const char*);
 
 void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
@@ -193,8 +199,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
-
-	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("83 FF 07 0F 87 ? ? ? ? 55 89 FF 48 89 E5 41 56 41 55 41 54 49 89 F4 53 48 89 D3 48 8D 15 E5 C2 20 00").RCast< decltype(UTIL_NetworkStateChanged) >();
+	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 41 54 53 85 FF 74 21 31 C0 83 FF 06 75 0C 48 8D 3D ? ? ? ? E8 ? ? ? ? 5B 41 5C 41 5D 41 5E 5D C3 0F 1F 44 00 00 4C 8B 66 50 48 89 F3 4C 8B 6E 28 48 8D 35 ? ? ? ? 49 8B 04 24 4C 89 E7 4C 8B 70 30 FF 50 70 4C 89 E7 48 89 C6 41 FF D6 48 8D 35 ? ? ? ?").RCast< decltype(UTIL_NetworkStateChanged) >();
 	if (!UTIL_NetworkStateChanged)
 	{
 		V_strncpy(error, "Failed to find function to get UTIL_NetworkStateChanged", maxlen);
@@ -206,7 +211,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_SMAPI->AddListener( this, this );
 
-	gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 91>(g_pSource2Server));
+	gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 93>(g_pSource2Server));
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
@@ -216,8 +221,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	if (late)
 	{
-		g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
-		g_pEntitySystem = g_pGameEntitySystem;
+		g_pEntitySystem = GameEntitySystem();
 		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
 		gpGlobals = g_pNetworkGameServer->GetGlobals();
 	}
@@ -392,15 +396,14 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
 {
 	g_pGameRules = nullptr;
-	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
-	g_pEntitySystem = g_pGameEntitySystem;
+	g_pEntitySystem = GameEntitySystem();
 
 	g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
 	gpGlobals = g_pNetworkGameServer->GetGlobals();
 	g_pUtilsApi->SendHookStartup();
 }
 
-void Menus::OnClientDisconnect(CPlayerSlot slot, int reason, const char *pszName, uint64 xuid, const char *pszNetworkID)
+void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID )
 {
 	if (xuid == 0)
     	return;
@@ -619,7 +622,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.1";
+	return "1.2";
 }
 
 const char* Menus::GetDate()
