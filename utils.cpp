@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "utils.h"
 #include "metamod_oslink.h"
+#include "schemasystem/schemasystem.h"
 
 Menus g_Menus;
 PLUGIN_EXPOSE(Menus, g_Menus);
@@ -9,21 +10,27 @@ CGlobalVars* gpGlobals = nullptr;
 IVEngineServer2* engine = nullptr;
 CCSGameRules* g_pGameRules = nullptr;
 CEntitySystem* g_pEntitySystem = nullptr;
-CSchemaSystem* g_pCSchemaSystem = nullptr;
 IGameEventManager2* gameeventmanager = nullptr;
 CGameEntitySystem* g_pGameEntitySystem = nullptr;
 INetworkGameServer* g_pNetworkGameServer = nullptr;
-IGameResourceServiceServer* g_pGameResourceService = nullptr;
+
+float g_flUniversalTime;
+float g_flLastTickedTime;
+bool g_bHasTicked;
 
 CGameEntitySystem* GameEntitySystem()
 {
-	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceService) + WIN_LINUX(0x58, 0x50));
+	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceServiceServer) + WIN_LINUX(0x58, 0x50));
 	return g_pGameEntitySystem;
 }
 
 std::map<uint32, MenuPlayer> g_MenuPlayer;
+std::map<uint32, std::string> g_TextMenuPlayer;
 
 std::map<std::string, std::string> g_vecPhrases;
+
+std::map<std::string, std::map<std::string, int>> g_Offsets;
+std::map<std::string, std::map<std::string, int>> g_ChainOffsets;
 
 MenusApi* g_pMenusApi = nullptr;
 IMenusApi* g_pMenusCore = nullptr;
@@ -32,6 +39,8 @@ UtilsApi* g_pUtilsApi = nullptr;
 IUtilsApi* g_pUtilsCore = nullptr;
 
 char szLanguage[16];
+int g_iMenuType;
+int g_iMenuTime;
 
 class GameSessionConfiguration_t { };
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
@@ -135,13 +144,13 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	PLUGIN_SAVEVARS();
 
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pCVar, ICvar, CVAR_INTERFACE_VERSION);
-	GET_V_IFACE_ANY(GetEngineFactory, g_pCSchemaSystem, CSchemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
+	GET_V_IFACE_ANY(GetEngineFactory, g_pSchemaSystem, ISchemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetServerFactory, g_pSource2Server, ISource2Server, SOURCE2SERVER_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameClients, IServerGameClients, SOURCE2GAMECLIENTS_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
-	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceService, IGameResourceServiceServer, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
+	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceServiceServer, IGameResourceService, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
 
 	CModule libserver(g_pSource2Server);
 	UTIL_ClientPrint = libserver.FindPatternSIMD(WIN_LINUX("48 85 C9 0F 84 2A 2A 2A 2A 48 8B C4 48 89 58 18", "55 48 89 E5 41 57 49 89 CF 41 56 49 89 D6 41 55 41 89 F5 41 54 4C 8D A5 A0 FE FF FF")).RCast< decltype(UTIL_ClientPrint) >();
@@ -236,24 +245,20 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	}
 
 	g_SMAPI->Format(szLanguage, sizeof(szLanguage), "%s", g_kvCore->GetString("ServerLang", "en"));
-	
-	KeyValues::AutoDelete g_kvPhrasesRanks("Phrases");
-	const char *pszPath2 = "addons/translations/menus.phrases.txt";
+	g_iMenuType = g_kvCore->GetInt("MenuType", 0);
+	g_iMenuTime = g_kvCore->GetInt("MenuTime", 60);
 
-	if (!g_kvPhrasesRanks->LoadFromFile(g_pFullFileSystem, pszPath2))
-	{
-		Warning("Failed to load %s\n", pszPath2);
-		return false;
-	}
-
-	for (KeyValues *pKey = g_kvPhrasesRanks->GetFirstTrueSubKey(); pKey; pKey = pKey->GetNextTrueSubKey())
-		g_vecPhrases[std::string(pKey->GetName())] = std::string(pKey->GetString(szLanguage));
+	//0 - в чат
+	//1 - также как в чат но в центр
+	//2 - выбор через WASD 
 
 	g_pMenusApi = new MenusApi();
 	g_pMenusCore = g_pMenusApi;
 
 	g_pUtilsApi = new UtilsApi();
 	g_pUtilsCore = g_pUtilsApi;
+
+	g_pUtilsApi->LoadTranslations("menus.phrases");
 
 	return true;
 }
@@ -273,6 +278,22 @@ bool Menus::Unload(char *error, size_t maxlen)
 	ConVar_Unregister();
 	
 	return true;
+}
+
+void UtilsApi::LoadTranslations(const char* FileName)
+{
+	KeyValues::AutoDelete g_kvPhrases("Phrases");
+	char pszPath[256];
+	g_SMAPI->Format(pszPath, sizeof(pszPath), "addons/translations/%s.txt", FileName);
+
+	if (!g_kvPhrases->LoadFromFile(g_pFullFileSystem, pszPath))
+	{
+		Warning("Failed to load %s\n", pszPath);
+		return;
+	}
+
+	for (KeyValues *pKey = g_kvPhrases->GetFirstTrueSubKey(); pKey; pKey = pKey->GetNextTrueSubKey())
+		g_vecPhrases[std::string(pKey->GetName())] = std::string(pKey->GetString(szLanguage));
 }
 
 bool Menus::FireEvent(IGameEvent* pEvent, bool bDontBroadcast)
@@ -298,12 +319,101 @@ void Menus::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
 		}
 	}
 	g_pUtilsApi->NextFrame();
+
+	if (simulating && g_bHasTicked)
+	{
+		g_flUniversalTime += gpGlobals->curtime - g_flLastTickedTime;
+	}
+
+	g_flLastTickedTime = gpGlobals->curtime;
+	g_bHasTicked = true;
+
+	for (int i = g_timers.Tail(); i != g_timers.InvalidIndex();)
+	{
+		auto timer = g_timers[i];
+
+		int prevIndex = i;
+		i = g_timers.Previous(i);
+
+		if (timer->m_flLastExecute == -1)
+			timer->m_flLastExecute = g_flUniversalTime;
+
+		// Timer execute 
+		if (timer->m_flLastExecute + timer->m_flInterval <= g_flUniversalTime)
+		{
+			if (!timer->Execute())
+			{
+				delete timer;
+				g_timers.Remove(prevIndex);
+			}
+			else
+			{
+				timer->m_flLastExecute = g_flUniversalTime;
+			}
+		}
+	}
 }
 
 void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
 {
-	bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), slot.Get(), args.ArgS());
+	bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), slot.Get(), args.ArgS(), true);
 	if(bFound) RETURN_META(MRES_SUPERCEDE);
+}
+
+int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
+{
+	auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
+	auto& hMenu = hMenuPlayer.hMenu;
+	if(hMenuPlayer.bEnabled)
+	{
+		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
+		if(iButton == 9 && hMenu.bExit)
+		{
+			hMenuPlayer.iList = 0;
+			hMenuPlayer.bEnabled = false;
+			if(g_iMenuType == 0)
+			{
+				for (size_t i = 0; i < 8; i++)
+				{
+					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
+				}
+			}
+			if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iSlot);
+			hMenuPlayer.hMenu = Menu();
+		}
+		else if(iButton == 8)
+		{
+			int iItems = size(hMenu.hItems) / 5;
+			if (size(hMenu.hItems) % 5 > 0) iItems++;
+			if(iItems > hMenuPlayer.iList+1)
+			{
+				hMenuPlayer.iList++;
+				g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+				if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
+			}
+		}
+		else if(iButton == 7)
+		{
+			if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
+			{
+				if(hMenuPlayer.iList != 0)
+				{
+					hMenuPlayer.iList--;
+					g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+				}
+				else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
+			}
+		}
+		else
+		{
+			int iItem = hMenuPlayer.iList*5+iButton-1;
+			if(hMenu.hItems.size() <= iItem) return 1;
+			if(hMenu.hItems[iItem].iType != 1) return 1;
+			if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
+		}
+		return 1;
+	}
+	return 0;
 }
 
 void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandContext& ctx, const CCommand& args)
@@ -331,53 +441,11 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			{
 				if(containsOnlyDigits(std::string(arg[0])))
 				{
-					auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
-					auto& hMenu = hMenuPlayer.hMenu;
-					if(hMenuPlayer.bEnabled)
+					if(g_iMenuType != 2)
 					{
 						int iButton = std::stoi(arg[0]);
-						if(iButton == 9 && hMenu.bExit)
-						{
-							hMenuPlayer.iList = 0;
-							hMenuPlayer.bEnabled = false;
-							for (size_t i = 0; i < 8; i++)
-							{
-								g_pUtilsCore->PrintToChat(iCommandPlayerSlot.Get(), " \x08-\x01");
-							}
-							if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iCommandPlayerSlot.Get());
-							hMenuPlayer.hMenu = Menu();
-						}
-						else if(iButton == 8)
-						{
-							int iItems = size(hMenu.hItems) / 5;
-							if (size(hMenu.hItems) % 5 > 0) iItems++;
-							if(iItems > hMenuPlayer.iList+1)
-							{
-								hMenuPlayer.iList++;
-								g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get(), false);
-								if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iCommandPlayerSlot.Get());
-							}
-						}
-						else if(iButton == 7)
-						{
-							if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
-							{
-								if(hMenuPlayer.iList != 0)
-								{
-									hMenuPlayer.iList--;
-									g_pMenusCore->DisplayPlayerMenu(hMenu, iCommandPlayerSlot.Get(), false);
-								}
-								else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iCommandPlayerSlot.Get());
-							}
-						}
-						else
-						{
-							int iItem = hMenuPlayer.iList*5+iButton-1;
-							if(hMenu.hItems.size() <= iItem) RETURN_META(MRES_SUPERCEDE);
-							if(hMenu.hItems[iItem].iType != 1) RETURN_META(MRES_SUPERCEDE);
-							if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iCommandPlayerSlot.Get());
-						}
-						RETURN_META(MRES_SUPERCEDE);
+						if(CheckActionMenu(iCommandPlayerSlot.Get(), pController, iButton))
+							RETURN_META(MRES_SUPERCEDE);
 					}
 				}
 			}
@@ -388,13 +456,18 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			char *pszMessage = (char *)(args.ArgS() + 1);
 			CCommand arg;
 			arg.Tokenize(pszMessage);
-			g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage);
+			g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage, false);
 		}
 	}
 }
 
 void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
 {
+	g_MenuPlayer.clear();
+	g_TextMenuPlayer.clear();
+	g_Offsets.clear();
+	g_ChainOffsets.clear();
+	g_bHasTicked = false;
 	g_pGameRules = nullptr;
 	g_pEntitySystem = GameEntitySystem();
 
@@ -457,41 +530,93 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 	{
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
-	}
-	char sBuff[128] = "\0";
-	int iCount = 0;
-	int iItems = size(hMenu.hItems) / 5;
-	if (size(hMenu.hItems) % 5 > 0) iItems++;
-	g_pUtilsCore->PrintToChat(iSlot, hMenu.szTitle.c_str());
-	for (size_t l = hMenuPlayer.iList*5; l < hMenu.hItems.size(); ++l) {
-		switch (hMenu.hItems[l].iType)
-		{
-			case 1:
-				g_SMAPI->Format(sBuff, sizeof(sBuff), " \x04[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
-				g_pUtilsCore->PrintToChat(iSlot, sBuff);
-				break;
-			case 2:
-				g_SMAPI->Format(sBuff, sizeof(sBuff), " \x08[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
-				g_pUtilsCore->PrintToChat(iSlot, sBuff);
-				break;
-		}
-		iCount++;
-		if(iCount == 5 || l == hMenu.hItems.size()-1)
-		{
-			int iC = 5;
-			if(hMenuPlayer.iList == 0 && !hMenu.bBack) iC++;
-			if(l == hMenu.hItems.size()-1)
+		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
+		new CTimer(0.0f,[iSlot, m_steamID, &hMenu, &hMenuPlayer]() {
+			if(!hMenuPlayer.bEnabled) return -1.0f;
+			if(std::time(0) >= hMenuPlayer.iEnd)
 			{
-				for (size_t i = 0; i < iC-iCount; i++)
-				{
-					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
-				}
+				hMenuPlayer.iList = 0;
+				hMenuPlayer.bEnabled = false;
+				return -1.0f;
 			}
-			if(hMenuPlayer.iList > 0 || hMenu.bBack) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Back")].c_str());
-			if(iItems > hMenuPlayer.iList+1) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Next")].c_str());
-			g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Exit")].c_str());
-			break;
+			if(g_iMenuType == 1 && g_TextMenuPlayer[m_steamID].size() > 0)
+			{
+				g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, g_TextMenuPlayer[m_steamID].c_str());
+			}
+			return 0.0f;
+		});
+	}
+	if(g_iMenuType == 0)
+	{
+		char sBuff[128] = "\0";
+		int iCount = 0;
+		int iItems = size(hMenu.hItems) / 5;
+		if (size(hMenu.hItems) % 5 > 0) iItems++;
+		g_pUtilsCore->PrintToChat(iSlot, hMenu.szTitle.c_str());
+		for (size_t l = hMenuPlayer.iList*5; l < hMenu.hItems.size(); ++l) {
+			switch (hMenu.hItems[l].iType)
+			{
+				case 1:
+					g_SMAPI->Format(sBuff, sizeof(sBuff), " \x04[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
+					g_pUtilsCore->PrintToChat(iSlot, sBuff);
+					break;
+				case 2:
+					g_SMAPI->Format(sBuff, sizeof(sBuff), " \x08[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
+					g_pUtilsCore->PrintToChat(iSlot, sBuff);
+					break;
+			}
+			iCount++;
+			if(iCount == 5 || l == hMenu.hItems.size()-1)
+			{
+				int iC = 5;
+				if(hMenuPlayer.iList == 0 && !hMenu.bBack) iC++;
+				if(l == hMenu.hItems.size()-1)
+				{
+					for (size_t i = 0; i < iC-iCount; i++)
+					{
+						g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
+					}
+				}
+				if(hMenuPlayer.iList > 0 || hMenu.bBack) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Back")].c_str());
+				if(iItems > hMenuPlayer.iList+1) g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Next")].c_str());
+				g_pUtilsCore->PrintToChat(iSlot, g_vecPhrases[std::string("Exit")].c_str());
+				break;
+			}
 		}
+	}
+	else if(g_iMenuType == 1)
+	{
+		std::string sBuff = "";
+		char sBuff2[256];
+		int iCount = 0;
+		int iItems = size(hMenu.hItems) / 5;
+		if (size(hMenu.hItems) % 5 > 0) iItems++;
+		g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlTitle")].c_str(), hMenu.szTitle.c_str());
+		sBuff += std::string(sBuff2);
+		for (size_t l = hMenuPlayer.iList*5; l < hMenu.hItems.size(); ++l) {
+			switch (hMenu.hItems[l].iType)
+			{
+				case 1:
+					g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlNumber")].c_str(), iCount+1, hMenu.hItems[l].sText.c_str());
+					sBuff += std::string(sBuff2);
+					break;
+				case 2:
+					g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlNumberBlock")].c_str(), iCount+1, hMenu.hItems[l].sText.c_str());
+					sBuff += std::string(sBuff2);
+					break;
+			}
+			iCount++;
+			if(iCount == 5 || l == hMenu.hItems.size()-1)
+			{
+				int iC = 5;
+				if(hMenuPlayer.iList == 0 && !hMenu.bBack) iC++;
+				if(hMenuPlayer.iList > 0 || hMenu.bBack) sBuff += g_vecPhrases[std::string("HtmlBack")];
+				if(iItems > hMenuPlayer.iList+1) sBuff += g_vecPhrases[std::string("HtmlNext")];
+				sBuff += g_vecPhrases[std::string("HtmlExit")];
+				break;
+			}
+		}
+		g_TextMenuPlayer[m_steamID] = sBuff;
 	}
 }
 
@@ -560,6 +685,121 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 	});
 }
 
+void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	engine->ClientPrintf(iSlot, buf);
+}
+
+void UtilsApi::PrintToConsoleAll(const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	UTIL_ClientPrintAll(2, buf, nullptr, nullptr, nullptr, nullptr);
+}
+
+void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
+	{
+		ConMsg("%s\n", buf);
+		return;
+	}
+
+	g_pUtilsApi->NextFrame([pPlayerController, buf](){
+		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
+			UTIL_ClientPrint(pPlayerController, 4, buf, nullptr, nullptr, nullptr, nullptr);
+	});
+}
+
+void UtilsApi::PrintToCenterAll(const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	UTIL_ClientPrintAll(4, buf, nullptr, nullptr, nullptr, nullptr);
+}
+
+void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[2048];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
+	{
+		ConMsg("%s\n", buf);
+		return;
+	}
+	int iEnd = std::time(0) + iDuration;
+	new CTimer(0.f, [iEnd, iSlot, buf]()
+	{
+		IGameEvent* pEvent = gameeventmanager->CreateEvent("show_survival_respawn_status");
+		if(!pEvent) return -1.0f;
+		pEvent->SetString("loc_token", buf);
+		pEvent->SetInt("duration", 5);
+		pEvent->SetInt("userid", iSlot);
+		gameeventmanager->FireEvent(pEvent);
+		if((iEnd - std::time(0)) > 0)
+		{
+			return 0.f;
+		}
+		// gameeventmanager->FreeEvent(pEvent);
+		return -1.0f;
+	});
+}
+
+void UtilsApi::PrintToCenterHtmlAll(int iDuration, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[2048];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	int iEnd = std::time(0) + iDuration;
+	IGameEvent* pEvent = gameeventmanager->CreateEvent("show_survival_respawn_status");
+	pEvent->SetString("loc_token", buf);
+	pEvent->SetInt("duration", 5);
+	pEvent->SetInt("userid", -1);
+	new CTimer(0.f, [pEvent, iEnd]()
+	{
+		gameeventmanager->FireEvent(pEvent);
+		if(std::time(0) >= iEnd)
+			return 0.f;
+		gameeventmanager->FreeEvent(pEvent);
+		return -1.0f;
+	});
+}
+
 void UtilsApi::NextFrame(std::function<void()> fn)
 {
 	m_nextFrame.push_back(fn);
@@ -600,17 +840,34 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 	if(entity)
 	{
 		SC_CBaseEntity* CEntity = (SC_CBaseEntity*)entity;
-		int offset = g_pCSchemaSystem->GetServerOffset(sClassName, sFieldName);
-		
-		int chainOffset = g_pCSchemaSystem->GetServerOffset(sClassName, "__m_pChainEntity");
-		if (chainOffset != -1)
+		if(g_Offsets[sClassName][sFieldName] == 0 || g_ChainOffsets[sClassName][sFieldName] == 0)
 		{
-			UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
-			return;
+			int offset = schema::GetServerOffset(sClassName, sFieldName);
+			g_Offsets[sClassName][sFieldName] = offset;
+			int chainOffset = schema::GetServerOffset(sClassName, "__m_pChainEntity");
+			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
+			if (chainOffset != -1)
+			{
+				UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+				return;
+			}
+			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+			CEntity->m_isSteadyState().ClearAll();
 		}
-		UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
-		CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-		CEntity->m_isSteadyState().ClearAll();
+		else
+		{
+			int offset = g_Offsets[sClassName][sFieldName];
+			int chainOffset = g_ChainOffsets[sClassName][sFieldName];
+			if (chainOffset != -1)
+			{
+				UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+				return;
+			}
+			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+			CEntity->m_isSteadyState().ClearAll();	
+		}
 	}
 }
 
@@ -622,7 +879,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.2";
+	return "1.3";
 }
 
 const char* Menus::GetDate()

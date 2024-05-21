@@ -13,6 +13,8 @@
 ///////////////////////      UTILS     //////////////////////////
 /////////////////////////////////////////////////////////////////
 
+class CCSGameRules;
+
 #define Utils_INTERFACE "IUtilsApi"
 
 typedef std::function<bool(int iSlot, const char* szContent)> CommandCallback;
@@ -45,6 +47,14 @@ public:
     virtual void SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0) = 0;
 
     virtual void ClearAllHooks(SourceMM::PluginId id) = 0;
+
+    virtual void LoadTranslations(const char* szFile) = 0;
+	virtual void PrintToConsole(int iSlot, const char* msg, ...) = 0;
+	virtual void PrintToConsoleAll(const char* msg, ...) = 0;
+	virtual void PrintToCenter(int iSlot, const char* msg, ...) = 0;
+	virtual void PrintToCenterAll(const char* msg, ...) = 0;
+	virtual void PrintToCenterHtml(int iSlot, int iDuration, const char* msg, ...) = 0;
+	virtual void PrintToCenterHtmlAll(int iDuration, const char* msg, ...) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -80,6 +90,7 @@ struct MenuPlayer
     bool bEnabled;
     int iList;
     Menu hMenu;
+    int iEnd;
 };
 
 class IMenusApi

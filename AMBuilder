@@ -37,7 +37,8 @@ for sdk_target in MMSPlugin.sdk_targets:
       'utils.cpp',
       os.path.join('sdk', 'schemasystem.cpp'),
       os.path.join('sdk', 'module.cpp'),
-      os.path.join('sdk', 'memaddr.cpp')
+      os.path.join('sdk', 'memaddr.cpp'),
+      os.path.join('sdk', 'ctimer.cpp')
     ]
 
     if cxx.target.arch == 'x86':

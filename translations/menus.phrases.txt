@@ -15,4 +15,34 @@
 		"ru"		" {LIGHTRED}[!9]{DEFAULT} Выход"
 		"en"		" {LIGHTRED}[!9]{DEFAULT} Exit"
 	}
+	"HtmlTitle"
+	{
+		"ru"		"<font color='gray' class='fontSize-ml'>%s</font><br/>"
+		"en"		"<font color='gray' class='fontSize-ml'>%s</font><br/>"
+	}
+	"HtmlNumber"
+	{
+		"ru"		"<font class='fontSize-sm' color='white'>[!%i] %s</font><br/>"
+		"en"		"<font class='fontSize-sm' color='white'>[!%i] %s</font><br/>"
+	}
+	"HtmlNumberBlock"
+	{
+		"ru"		"<font class='fontSize-sm' color='gray'>[!%i] %s</font><br/>"
+		"en"		"<font class='fontSize-sm' color='gray'>[!%i] %s</font><br/>"
+	}
+	"HtmlBack"
+	{
+		"ru"		"<font color='gray'>[!7] Назад  </font>"
+		"en"		"<font color='gray'>[!7] Back  </font>"
+	}
+	"HtmlNext"
+	{
+		"ru"		"<font color='gray'>[!8] Вперёд  </font>"
+		"en"		"<font color='gray'>[!8] Next  </font>"
+	}
+	"HtmlExit"
+	{
+		"ru"		"<font color='red'>[!9] Выход</font><br/>"
+		"en"		"<font color='red'>[!9] Exit</font><br/>"
+	}
 }

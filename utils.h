@@ -23,6 +23,7 @@
 #include "sdk/CCSPlayer_ItemServices.h"
 #include "sdk/CSmokeGrenadeProjectile.h"
 #include "sdk/module.h"
+#include "sdk/ctimer.h"
 #include "funchook.h"
 #include "include/menus.h"
 #include <map>
@@ -79,8 +80,14 @@ public:
     CEntitySystem* GetCEntitySystem();
 	CGlobalVars* GetCGlobalVars();
 	IGameEventManager2* GetGameEventManager();
-
 	const char* GetLanguage();
+	void LoadTranslations(const char* szFile);
+	void PrintToConsole(int iSlot, const char* msg, ...);
+	void PrintToConsoleAll(const char* msg, ...);
+	void PrintToCenter(int iSlot, const char* msg, ...);
+	void PrintToCenterAll(const char* msg, ...);
+	void PrintToCenterHtml(int iSlot, int iDuration, const char* msg, ...);
+	void PrintToCenterHtmlAll(int iDuration, const char* msg, ...);
 	
 	void StartupServer(SourceMM::PluginId id, StartupCallback fn) override {
 		StartupHook[id].push_back(fn);
@@ -169,20 +176,26 @@ public:
 		}
 		return bFound;
 	}
-	bool FindAndSendCommandCallback(const char* szCommand, int iSlot, const char* szContent) {
+	bool FindAndSendCommandCallback(const char* szCommand, int iSlot, const char* szContent, bool bConsole) {
 		bool bFound = false;
-		for(auto& item : ConsoleCommands)
+		if(bConsole)
 		{
-			if(item.second[std::string(szCommand)] && item.second[std::string(szCommand)](iSlot, szContent))
+			for(auto& item : ConsoleCommands)
 			{
-				bFound = true;
+				if(item.second[std::string(szCommand)] && item.second[std::string(szCommand)](iSlot, szContent))
+				{
+					bFound = true;
+				}
 			}
 		}
-		for(auto& item : ChatCommands)
+		else
 		{
-			if(item.second[std::string(szCommand)] && item.second[std::string(szCommand)](iSlot, szContent))
+			for(auto& item : ChatCommands)
 			{
-				bFound = true;
+				if(item.second[std::string(szCommand)] && item.second[std::string(szCommand)](iSlot, szContent))
+				{
+					bFound = true;
+				}
 			}
 		}
 		return bFound;
