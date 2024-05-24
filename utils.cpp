@@ -58,13 +58,10 @@ void (*UTIL_StateChanged)(CNetworkTransmitComponent& networkTransmitComponent, C
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 
-void (*CGameEventManager_Init)(IGameEventManager2* pGameEventManager) = nullptr;
-
 using namespace DynLibUtils;
 
 funchook_t* m_SayHook;
 funchook_t* m_SayTeamHook;
-funchook_t* m_GameEventManagerHook;
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -143,13 +140,6 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 	return nullptr;
 }
 
-void CGameEventManager_Init_Hook(IGameEventManager2* pGameEventManager)
-{
-	gameeventmanager = pGameEventManager;
-	CGameEventManager_Init(pGameEventManager);
-	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(&g_Menus, &Menus::FireEvent), false);
-}
-
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
@@ -208,6 +198,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		return false;
 	}
 	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
+	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 	
 	UTIL_StateChanged = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
 	if (!UTIL_StateChanged)
