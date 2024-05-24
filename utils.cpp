@@ -54,12 +54,13 @@ void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char
 void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
 
 void (*UTIL_StateChanged)(CNetworkTransmitComponent& networkTransmitComponent, CEntityInstance *ent, int64 offset, int16 a4, int16 a5) = nullptr;
-void (*UTIL_NetworkStateChanged)(int64 chainEntity, int64 offset, int64 a3) = nullptr;
 
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 
 void (*CGameEventManager_Init)(IGameEventManager2* pGameEventManager) = nullptr;
+
+using namespace DynLibUtils;
 
 funchook_t* m_SayHook;
 funchook_t* m_SayTeamHook;
@@ -163,81 +164,56 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceServiceServer, IGameResourceService, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
 
 	CModule libserver(g_pSource2Server);
-	UTIL_ClientPrint = libserver.FindPatternSIMD(WIN_LINUX("48 85 C9 0F 84 2A 2A 2A 2A 48 8B C4 48 89 58 18", "55 48 89 E5 41 57 49 89 CF 41 56 49 89 D6 41 55 41 89 F5 41 54 4C 8D A5 A0 FE FF FF")).RCast< decltype(UTIL_ClientPrint) >();
+	UTIL_ClientPrint = libserver.FindPattern(WIN_LINUX("48 85 C9 0F 84 2A 2A 2A 2A 48 8B C4 48 89 58 18", "55 48 89 E5 41 57 49 89 CF 41 56 49 89 D6 41 55 41 89 F5 41 54 4C 8D A5 A0 FE FF FF")).RCast< decltype(UTIL_ClientPrint) >();
 	if (!UTIL_ClientPrint)
 	{
 		V_strncpy(error, "Failed to find function to get UTIL_ClientPrint", maxlen);
 		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
 	
-	UTIL_ClientPrintAll = libserver.FindPatternSIMD(WIN_LINUX("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 70 01 2A 2A 8B E9", "55 48 89 E5 41 57 49 89 D7 41 56 49 89 F6 41 55 41 89 FD")).RCast< decltype(UTIL_ClientPrintAll) >();
+	UTIL_ClientPrintAll = libserver.FindPattern(WIN_LINUX("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 70 01 2A 2A 8B E9", "55 48 89 E5 41 57 49 89 D7 41 56 49 89 F6 41 55 41 89 FD")).RCast< decltype(UTIL_ClientPrintAll) >();
 	if (!UTIL_ClientPrintAll)
 	{
-		V_strncpy(error, "Failed to find function to get UTIL_ClientPrintAll", sizeof(error));
+		V_strncpy(error, "Failed to find function to get UTIL_ClientPrintAll", maxlen);
 		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
 
-	UTIL_SayTeam = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_SayTeam) >();
+	UTIL_SayTeam = libserver.FindPattern("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_SayTeam) >();
 	if (!UTIL_SayTeam)
 	{
-		V_strncpy(error, "Failed to find function to get UTIL_SayTeam", sizeof(error));
+		V_strncpy(error, "Failed to find function to get UTIL_SayTeam", maxlen);
 		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
 	m_SayTeamHook = funchook_create();
 	funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
 	funchook_install(m_SayTeamHook, 0);
 
-	UTIL_Say = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_Say) >();
+	UTIL_Say = libserver.FindPattern("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_Say) >();
 	if (!UTIL_Say)
 	{
-		V_strncpy(error, "Failed to find function to get UTIL_Say", sizeof(error));
+		V_strncpy(error, "Failed to find function to get UTIL_Say", maxlen);
 		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
 	m_SayHook = funchook_create();
 	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
 	funchook_install(m_SayHook, 0);
 
-	CGameEventManager_Init = libserver.FindPatternSIMD("55 48 89 E5 41 54 49 89 FC 48 83 EC 08 48 8B 07 FF 50 18").RCast< decltype(CGameEventManager_Init) >();
-	if (!CGameEventManager_Init)
-	{
-		V_strncpy(error, "Failed to find function to get CGameEventManager_Init", sizeof(error));
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
+	auto gameEventManagerFn = libserver.FindPattern( "55 31 C9 BA ? ? ? ? 48 89 E5 41 56 49 89 FE 41 55 49 89 F5 41 54 48 8D 35 ? ? ? ? 53");
+	if( !gameEventManagerFn ) {
+		snprintf( error, maxlen, "Not found func to get g_pGameEventManager" );
 		return false;
 	}
-	m_GameEventManagerHook = funchook_create();
-	funchook_prepare(m_GameEventManagerHook, (void**)&CGameEventManager_Init, (void*)CGameEventManager_Init_Hook);
-	funchook_install(m_GameEventManagerHook, 0);
+	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
 	
-	UTIL_StateChanged = libserver.FindPatternSIMD("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
+	UTIL_StateChanged = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
 	if (!UTIL_StateChanged)
 	{
 		V_strncpy(error, "Failed to find function to get UTIL_StateChanged", maxlen);
 		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
-		return false;
-	}
-	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("4C 8B 07 4D 85 C0 74 ? 49 8B 40 10").RCast< decltype(UTIL_NetworkStateChanged) >();
-	if (!UTIL_NetworkStateChanged)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_NetworkStateChanged", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
-		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
 
@@ -868,7 +844,8 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
 			if (chainOffset != -1)
 			{
-				UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+				const auto entity = static_cast<CEntityInstance*>(CEntity);
+				entity->NetworkStateChanged(offset);
 				return;
 			}
 			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
@@ -881,7 +858,8 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			int chainOffset = g_ChainOffsets[sClassName][sFieldName];
 			if (chainOffset != -1)
 			{
-				UTIL_NetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
+				const auto entity = static_cast<CEntityInstance*>(CEntity);
+				entity->NetworkStateChanged(offset);
 				return;
 			}
 			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
