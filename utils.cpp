@@ -53,8 +53,6 @@ SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const G
 void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
 void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
 
-void (*UTIL_StateChanged)(CNetworkTransmitComponent& networkTransmitComponent, CEntityInstance *ent, int64 offset, int16 a4, int16 a5) = nullptr;
-
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 
@@ -199,14 +197,6 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	}
 	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
 	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
-	
-	UTIL_StateChanged = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
-	if (!UTIL_StateChanged)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_StateChanged", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		return false;
-	}
 
 	g_SMAPI->AddListener( this, this );
 
@@ -822,6 +812,16 @@ const char* UtilsApi::GetLanguage()
 	return szLanguage;
 }
 
+//Thank komaschenko for help
+void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, int32 nArrayIndex = -1)
+{
+    CEntityInstance* pEntity = *reinterpret_cast<CEntityInstance**>(networkVarChainer);
+    if (pEntity && (pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
+    {
+        pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
+    }
+}
+
 void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
 {
 	if(entity)
@@ -835,11 +835,11 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
 			if (chainOffset != -1)
 			{
-				const auto entity = static_cast<CEntityInstance*>(CEntity);
-				entity->NetworkStateChanged(offset);
+				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
 				return;
 			}
-			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+			const auto entity = static_cast<CEntityInstance*>(CEntity);
+			entity->NetworkStateChanged(offset);
 			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
 			CEntity->m_isSteadyState().ClearAll();
 		}
@@ -849,11 +849,11 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			int chainOffset = g_ChainOffsets[sClassName][sFieldName];
 			if (chainOffset != -1)
 			{
-				const auto entity = static_cast<CEntityInstance*>(CEntity);
-				entity->NetworkStateChanged(offset);
+				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
 				return;
 			}
-			UTIL_StateChanged(CEntity->m_NetworkTransmitComponent(), CEntity, offset, -1, -1);
+			const auto entity = static_cast<CEntityInstance*>(CEntity);
+			entity->NetworkStateChanged(offset);
 			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
 			CEntity->m_isSteadyState().ClearAll();	
 		}
@@ -868,7 +868,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.3.1";
+	return "1.3.2";
 }
 
 const char* Menus::GetDate()
