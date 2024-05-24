@@ -38,6 +38,7 @@ public:
 	bool Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late);
 	bool Unload(char* error, size_t maxlen);
 	void* OnMetamodQuery(const char* iface, int* ret);
+	bool FireEvent(IGameEvent* pEvent, bool bDontBroadcast);
 private:
 	const char* GetAuthor();
 	const char* GetName();
@@ -49,7 +50,6 @@ private:
 	const char* GetLogTag();
 
 private: // Hooks
-	bool FireEvent(IGameEvent* pEvent, bool bDontBroadcast);
 	void ClientCommand(CPlayerSlot slot, const CCommand &args);
 	void GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*);

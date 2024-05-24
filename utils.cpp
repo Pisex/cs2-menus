@@ -59,8 +59,11 @@ void (*UTIL_NetworkStateChanged)(int64 chainEntity, int64 offset, int64 a3) = nu
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 
+void (*CGameEventManager_Init)(IGameEventManager2* pGameEventManager) = nullptr;
+
 funchook_t* m_SayHook;
 funchook_t* m_SayTeamHook;
+funchook_t* m_GameEventManagerHook;
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -139,6 +142,13 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 	return nullptr;
 }
 
+void CGameEventManager_Init_Hook(IGameEventManager2* pGameEventManager)
+{
+	gameeventmanager = pGameEventManager;
+	CGameEventManager_Init(pGameEventManager);
+	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(&g_Menus, &Menus::FireEvent), false);
+}
+
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
@@ -198,6 +208,19 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	m_SayHook = funchook_create();
 	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
 	funchook_install(m_SayHook, 0);
+
+	CGameEventManager_Init = libserver.FindPatternSIMD("55 48 89 E5 41 54 49 89 FC 48 83 EC 08 48 8B 07 FF 50 18").RCast< decltype(CGameEventManager_Init) >();
+	if (!CGameEventManager_Init)
+	{
+		V_strncpy(error, "Failed to find function to get CGameEventManager_Init", sizeof(error));
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+	m_GameEventManagerHook = funchook_create();
+	funchook_prepare(m_GameEventManagerHook, (void**)&CGameEventManager_Init, (void*)CGameEventManager_Init_Hook);
+	funchook_install(m_GameEventManagerHook, 0);
 	
 	UTIL_StateChanged = libserver.FindPatternSIMD("55 48 89 E5 41 57 41 56 41 55 41 54 53 89 D3").RCast< decltype(UTIL_StateChanged) >();
 	if (!UTIL_StateChanged)
@@ -208,7 +231,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		engine->ServerCommand(sBuffer.c_str());
 		return false;
 	}
-	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("55 48 89 E5 41 56 41 55 41 54 53 85 FF 74 21 31 C0 83 FF 06 75 0C 48 8D 3D ? ? ? ? E8 ? ? ? ? 5B 41 5C 41 5D 41 5E 5D C3 0F 1F 44 00 00 4C 8B 66 50 48 89 F3 4C 8B 6E 28 48 8D 35 ? ? ? ? 49 8B 04 24 4C 89 E7 4C 8B 70 30 FF 50 70 4C 89 E7 48 89 C6 41 FF D6 48 8D 35 ? ? ? ?").RCast< decltype(UTIL_NetworkStateChanged) >();
+	UTIL_NetworkStateChanged = libserver.FindPatternSIMD("4C 8B 07 4D 85 C0 74 ? 49 8B 40 10").RCast< decltype(UTIL_NetworkStateChanged) >();
 	if (!UTIL_NetworkStateChanged)
 	{
 		V_strncpy(error, "Failed to find function to get UTIL_NetworkStateChanged", maxlen);
@@ -220,19 +243,17 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_SMAPI->AddListener( this, this );
 
-	gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 93>(g_pSource2Server));
+	// gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 93>(g_pSource2Server));
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
 	SH_ADD_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
-	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 
 	if (late)
 	{
 		g_pEntitySystem = GameEntitySystem();
-		g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
-		gpGlobals = g_pNetworkGameServer->GetGlobals();
+		gpGlobals = engine->GetServerGlobals();
 	}
 
 	KeyValues::AutoDelete g_kvCore("Core");
@@ -471,8 +492,7 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 	g_pGameRules = nullptr;
 	g_pEntitySystem = GameEntitySystem();
 
-	g_pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
-	gpGlobals = g_pNetworkGameServer->GetGlobals();
+	gpGlobals = engine->GetServerGlobals();
 	g_pUtilsApi->SendHookStartup();
 }
 
@@ -879,7 +899,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.3";
+	return "1.3.1";
 }
 
 const char* Menus::GetDate()
