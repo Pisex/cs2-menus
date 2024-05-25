@@ -73,7 +73,7 @@ void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 	{
 		if(g_pEntitySystem)
 		{
-			auto pController = (CCSPlayerController*)g_pEntitySystem->GetBaseEntity((CEntityIndex)(ctx.GetPlayerSlot().Get() + 1));
+			auto pController = CCSPlayerController::FromSlot(ctx.GetPlayerSlot().Get());
 			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
 				bCallback = false;
 		}
@@ -93,7 +93,7 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 	{
 		if(g_pEntitySystem)
 		{
-			auto pController = (CCSPlayerController*)g_pEntitySystem->GetBaseEntity((CEntityIndex)(ctx.GetPlayerSlot().Get() + 1));
+			auto pController = CCSPlayerController::FromSlot(ctx.GetPlayerSlot().Get());
 			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
 				bCallback = false;
 		}
@@ -200,7 +200,6 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_SMAPI->AddListener( this, this );
 
-	// gameeventmanager = static_cast<IGameEventManager2*>(CallVFunc<IToolGameEventAPI*, 93>(g_pSource2Server));
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
@@ -406,7 +405,7 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 
 	if (iCommandPlayerSlot != -1 && (bSay || bTeamSay))
 	{
-		auto pController = (CCSPlayerController*)g_pEntitySystem->GetBaseEntity((CEntityIndex)(iCommandPlayerSlot.Get() + 1));
+		auto pController = CCSPlayerController::FromSlot(iCommandPlayerSlot.Get());
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
 		bool bSilent = *args[1] == '/';
 
@@ -458,7 +457,7 @@ void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason re
 	if (xuid == 0)
     	return;
 
-	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(slot.Get() + 1)));
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(slot.Get());
 	if (!pPlayerController)
 		return;
 
@@ -492,7 +491,7 @@ void MenusApi::SetExitMenu(Menu& hMenu, bool bExit)
 
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 {
-	CCSPlayerController* pPlayer = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	CCSPlayerController* pPlayer = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayer)
 		return;
 	uint32 m_steamID = pPlayer->m_steamID();
@@ -611,7 +610,7 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
-	CCSPlayerController* pPlayer = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	CCSPlayerController* pPlayer = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayer)
 		return;
 	uint32 m_steamID = pPlayer->m_steamID();
@@ -647,7 +646,7 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 	{
 		ConMsg("%s\n", buf);
@@ -695,7 +694,7 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 	{
 		ConMsg("%s\n", buf);
@@ -729,7 +728,7 @@ void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CCSPlayerController* pPlayerController = static_cast<CCSPlayerController*>(g_pEntitySystem->GetBaseEntity(static_cast<CEntityIndex>(iSlot + 1)));
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 	{
 		ConMsg("%s\n", buf);
@@ -822,11 +821,10 @@ void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, 
     }
 }
 
-void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
+void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
 {
-	if(entity)
+	if(CEntity)
 	{
-		SC_CBaseEntity* CEntity = (SC_CBaseEntity*)entity;
 		if(g_Offsets[sClassName][sFieldName] == 0 || g_ChainOffsets[sClassName][sFieldName] == 0)
 		{
 			int offset = schema::GetServerOffset(sClassName, sFieldName);
@@ -840,8 +838,6 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
-			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-			CEntity->m_isSteadyState().ClearAll();
 		}
 		else
 		{
@@ -854,8 +850,6 @@ void UtilsApi::SetStateChanged(CBaseEntity* entity, const char* sClassName, cons
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
-			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-			CEntity->m_isSteadyState().ClearAll();	
 		}
 	}
 }

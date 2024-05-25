@@ -15,6 +15,7 @@ for sdk_target in MMSPlugin.sdk_targets:
     binary.compiler.cxxincludes += [
       os.path.join(builder.currentSourcePath, 'funchook', 'include'),
       os.path.join(builder.sourcePath, 'include'),
+      os.path.join(builder.sourcePath, '..', 'SchemaEntity'),
     ]
 
     if binary.compiler.target.platform == 'linux':
@@ -35,9 +36,9 @@ for sdk_target in MMSPlugin.sdk_targets:
 
     binary.sources += [
       'utils.cpp',
-      os.path.join('sdk', 'schemasystem.cpp'),
-      os.path.join('sdk', 'module.cpp'),
-      os.path.join('sdk', 'ctimer.cpp')
+      os.path.join('..', 'SchemaEntity', 'schemasystem.cpp'),
+      os.path.join('..', 'SchemaEntity', 'module.cpp'),
+      os.path.join('..', 'SchemaEntity', 'ctimer.cpp'),
     ]
 
     if cxx.target.arch == 'x86':
