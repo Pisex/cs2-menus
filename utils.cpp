@@ -74,7 +74,7 @@ void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 		if(g_pEntitySystem)
 		{
 			auto pController = CCSPlayerController::FromSlot(ctx.GetPlayerSlot().Get());
-			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
+			if(bCallback && pController && pController->GetPawn() && pController->m_steamID() != 0 && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
 				bCallback = false;
 		}
 	}
@@ -94,7 +94,7 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 		if(g_pEntitySystem)
 		{
 			auto pController = CCSPlayerController::FromSlot(ctx.GetPlayerSlot().Get());
-			if(bCallback && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
+			if(bCallback && pController && pController->GetPawn() && pController->m_steamID() != 0 && g_MenuPlayer[pController->m_steamID()].bEnabled && containsOnlyDigits(std::string(args[1] + 1)))
 				bCallback = false;
 		}
 	}
@@ -433,7 +433,8 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			char *pszMessage = (char *)(args.ArgS() + 1);
 			CCommand arg;
 			arg.Tokenize(pszMessage);
-			g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage, false);
+			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage, false);
+			if(bFound) RETURN_META(MRES_SUPERCEDE);
 		}
 	}
 }
@@ -815,9 +816,12 @@ const char* UtilsApi::GetLanguage()
 void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, int32 nArrayIndex = -1)
 {
     CEntityInstance* pEntity = *reinterpret_cast<CEntityInstance**>(networkVarChainer);
-    if (pEntity && (pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
+    if (pEntity)
     {
-        pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
+		if((pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
+		{
+			pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
+		}
     }
 }
 
@@ -827,11 +831,13 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 	{
 		if(g_Offsets[sClassName][sFieldName] == 0 || g_ChainOffsets[sClassName][sFieldName] == 0)
 		{
-			int offset = schema::GetServerOffset(sClassName, sFieldName);
+			static const auto datatable_hash = hash_32_fnv1a_const(sClassName);
+			static const auto prop_hash = hash_32_fnv1a_const(sFieldName);
+			int offset = schema::GetOffset(sClassName, datatable_hash, sFieldName, prop_hash).offset;
 			g_Offsets[sClassName][sFieldName] = offset;
-			int chainOffset = schema::GetServerOffset(sClassName, "__m_pChainEntity");
+			int chainOffset = schema::FindChainOffset(sClassName);
 			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
-			if (chainOffset != -1)
+			if (chainOffset != 0)
 			{
 				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
 				return;
@@ -843,7 +849,7 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 		{
 			int offset = g_Offsets[sClassName][sFieldName];
 			int chainOffset = g_ChainOffsets[sClassName][sFieldName];
-			if (chainOffset != -1)
+			if (chainOffset != 0)
 			{
 				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
 				return;
@@ -862,7 +868,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.3.2";
+	return "1.3.3";
 }
 
 const char* Menus::GetDate()

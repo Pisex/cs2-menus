@@ -7,41 +7,42 @@ import os
 # so just fall back to the single binary.
 # Multi-sdk solutions should be manually loaded with a custom plugin loader (examples being sourcemod, stripper:source)
 for sdk_target in MMSPlugin.sdk_targets:
-    sdk = sdk_target.sdk
-    cxx = sdk_target.cxx
+  sdk = sdk_target.sdk
+  cxx = sdk_target.cxx
+    
+  cxx.cxxflags += ['-Wno-invalid-offsetof']
+  binary = MMSPlugin.HL2Library(builder, cxx, MMSPlugin.plugin_name, sdk)
 
-    binary = MMSPlugin.HL2Library(builder, cxx, MMSPlugin.plugin_name, sdk)
+  binary.compiler.cxxincludes += [
+    os.path.join(builder.currentSourcePath, 'funchook', 'include'),
+    os.path.join(builder.sourcePath, 'include'),
+    os.path.join(builder.sourcePath, '..', 'SchemaEntity'),
+  ]
 
-    binary.compiler.cxxincludes += [
-      os.path.join(builder.currentSourcePath, 'funchook', 'include'),
-      os.path.join(builder.sourcePath, 'include'),
-      os.path.join(builder.sourcePath, '..', 'SchemaEntity'),
+  if binary.compiler.target.platform == 'linux':
+    binary.compiler.postlink += [
+      os.path.join(builder.sourcePath, 'funchook', 'lib', 'libfunchook.a'),
+      os.path.join(builder.sourcePath, 'funchook', 'lib', 'libdistorm.a'),
+    ]
+  elif binary.compiler.target.platform == 'windows':
+    binary.compiler.postlink += [
+      os.path.join('psapi.lib'),
+      os.path.join(builder.sourcePath, 'funchook', 'lib', 'funchook.lib'),
+      os.path.join(builder.sourcePath, 'funchook', 'lib', 'distorm.lib'),
     ]
 
-    if binary.compiler.target.platform == 'linux':
-      binary.compiler.postlink += [
-        os.path.join(builder.sourcePath, 'funchook', 'lib', 'libfunchook.a'),
-        os.path.join(builder.sourcePath, 'funchook', 'lib', 'libdistorm.a'),
-      ]
-    elif binary.compiler.target.platform == 'windows':
-      binary.compiler.postlink += [
-        os.path.join('psapi.lib'),
-        os.path.join(builder.sourcePath, 'funchook', 'lib', 'funchook.lib'),
-        os.path.join(builder.sourcePath, 'funchook', 'lib', 'distorm.lib'),
-      ]
+  binary.custom = [builder.tools.Protoc(protoc = sdk_target.protoc, sources = [
+    os.path.join(sdk['path'], 'common', 'network_connection.proto')
+  ])]
 
-    binary.custom = [builder.tools.Protoc(protoc = sdk_target.protoc, sources = [
-      os.path.join(sdk['path'], 'common', 'network_connection.proto')
-    ])]
+  binary.sources += [
+    'utils.cpp',
+    os.path.join('..', 'SchemaEntity', 'schemasystem.cpp'),
+    os.path.join('..', 'SchemaEntity', 'module.cpp'),
+    os.path.join('..', 'SchemaEntity', 'ctimer.cpp'),
+  ]
 
-    binary.sources += [
-      'utils.cpp',
-      os.path.join('..', 'SchemaEntity', 'schemasystem.cpp'),
-      os.path.join('..', 'SchemaEntity', 'module.cpp'),
-      os.path.join('..', 'SchemaEntity', 'ctimer.cpp'),
-    ]
-
-    if cxx.target.arch == 'x86':
-      binary.sources += ['sourcehook/sourcehook_hookmangen.cpp']
-    nodes = builder.Add(binary)
-    MMSPlugin.binaries += [nodes]
+  if cxx.target.arch == 'x86':
+    binary.sources += ['sourcehook/sourcehook_hookmangen.cpp']
+  nodes = builder.Add(binary)
+  MMSPlugin.binaries += [nodes]
