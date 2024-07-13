@@ -35,3 +35,8 @@ for task in MMSPlugin.binaries:
     pdb_list.append(task.debug)
 
 builder.AddCopy(os.path.join(builder.buildPath, MMSPlugin.plugin_name + '.vdf'), metamod_folder)
+
+configs_folder = builder.AddFolder(os.path.join('addons', 'translations'))
+builder.AddCopy(os.path.join(builder.sourcePath, 'translations', 'menus.phrases.txt'), configs_folder)
+configs_folder = builder.AddFolder(os.path.join('addons', 'configs'))
+builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'core.cfg'), configs_folder)

@@ -2,6 +2,10 @@
 #include "utils.h"
 #include "metamod_oslink.h"
 #include "schemasystem/schemasystem.h"
+#include <iostream>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
 
 Menus g_Menus;
 PLUGIN_EXPOSE(Menus, g_Menus);
@@ -38,17 +42,25 @@ IMenusApi* g_pMenusCore = nullptr;
 UtilsApi* g_pUtilsApi = nullptr;
 IUtilsApi* g_pUtilsCore = nullptr;
 
+PlayersApi* g_pPlayersApi = nullptr;
+IPlayersApi* g_pPlayersCore = nullptr;
+
 char szLanguage[16];
 int g_iMenuType;
 int g_iMenuTime;
+int g_iDelayAuthFailKick;
 
 class GameSessionConfiguration_t { };
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK2(IGameEventManager2, FireEvent, SH_NOATTRIB, 0, bool, IGameEvent*, bool);
 SH_DECL_HOOK2_void(IServerGameClients, ClientCommand, SH_NOATTRIB, 0, CPlayerSlot, const CCommand&);
 SH_DECL_HOOK3_void(ICvar, DispatchConCommand, SH_NOATTRIB, 0, ConCommandHandle, const CCommandContext&, const CCommand&);
-SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64, const char *);
 SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&, ISource2WorldSession*, const char*);
+SH_DECL_HOOK0_void(IServerGameDLL, GameServerSteamAPIActivated, SH_NOATTRIB, 0);
+SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64, const char *);
+SH_DECL_HOOK4_void(IServerGameClients, ClientPutInServer, SH_NOATTRIB, 0, CPlayerSlot, char const *, int, uint64);
+SH_DECL_HOOK6_void(IServerGameClients, OnClientConnected, SH_NOATTRIB, 0, CPlayerSlot, const char*, uint64, const char *, const char *, bool);
+SH_DECL_HOOK6(IServerGameClients, ClientConnect, SH_NOATTRIB, 0, bool, CPlayerSlot, const char*, uint64, const char *, bool, CBufferString *);
 
 void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
 void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
@@ -107,7 +119,7 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 
 std::string Colorizer(std::string str)
 {
-	for (int i = 0; i < std::size(colors_hex); i++)
+	for (size_t i = 0; i < std::size(colors_hex); i++)
 	{
 		size_t pos = 0;
 
@@ -132,6 +144,11 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 	{
 		*ret = META_IFACE_OK;
 		return g_pUtilsCore;
+	}
+	if (!strcmp(iface, PLAYERS_INTERFACE))
+	{
+		*ret = META_IFACE_OK;
+		return g_pPlayersCore;
 	}
 
 	*ret = META_IFACE_FAILED;
@@ -201,10 +218,14 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	g_SMAPI->AddListener( this, this );
 
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
-	SH_ADD_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
 	SH_ADD_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
+	SH_ADD_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &Menus::OnGameServerSteamAPIActivated), false);
+	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientDisconnect), true);
+	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
+	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
+	SH_ADD_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
 
 	if (late)
 	{
@@ -224,6 +245,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	g_SMAPI->Format(szLanguage, sizeof(szLanguage), "%s", g_kvCore->GetString("ServerLang", "en"));
 	g_iMenuType = g_kvCore->GetInt("MenuType", 0);
 	g_iMenuTime = g_kvCore->GetInt("MenuTime", 60);
+	g_iDelayAuthFailKick = g_kvCore->GetInt("delay_auth_fail_kick", 30);
 
 	//0 - в чат
 	//1 - также как в чат но в центр
@@ -234,6 +256,9 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_pUtilsApi = new UtilsApi();
 	g_pUtilsCore = g_pUtilsApi;
+
+	g_pPlayersApi = new PlayersApi();
+	g_pPlayersCore = g_pPlayersApi;
 
 	g_pUtilsApi->LoadTranslations("menus.phrases");
 
@@ -246,8 +271,12 @@ bool Menus::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
 	SH_REMOVE_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
-	SH_REMOVE_HOOK_MEMFUNC(IServerGameClients, ClientDisconnect, g_pSource2GameClients, this, &Menus::OnClientDisconnect, true);
 	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
+	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &Menus::OnGameServerSteamAPIActivated), false);
+	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientDisconnect), true);
+	SH_REMOVE_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
+	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
+	SH_REMOVE_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
 
 	funchook_destroy(m_SayHook);
 	funchook_destroy(m_SayTeamHook);
@@ -255,6 +284,88 @@ bool Menus::Unload(char *error, size_t maxlen)
 	ConVar_Unregister();
 	
 	return true;
+}
+
+void Menus::OnGameServerSteamAPIActivated()
+{
+	m_CallbackValidateAuthTicketResponse.Register(this, &Menus::OnValidateAuthTicketHook);
+}
+
+void Menus::Hook_OnClientConnected(CPlayerSlot slot, const char* pszName, uint64 xuid, const char* pszNetworkID, const char* pszAddress, bool bFakePlayer)
+{
+	if(bFakePlayer)
+		m_Players[slot.Get()] = new Player(slot.Get(), true);
+}
+
+bool Menus::Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason )
+{
+	Player *pPlayer = new Player(slot.Get());
+	pPlayer->SetUnauthenticatedSteamId(new CSteamID(xuid));
+
+	std::string ip(pszNetworkID);
+
+	for (size_t i = 0; i < ip.length(); i++)
+	{
+		if (ip[i] == ':')
+		{
+			ip = ip.substr(0, i);
+			break;
+		}
+	}
+	pPlayer->SetIpAddress(ip);
+	pPlayer->SetConnected();
+	m_Players[slot.Get()] = pPlayer;
+	RETURN_META_VALUE(MRES_IGNORED, true);
+}
+
+void Menus::Hook_ClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid )
+{
+	m_Players[slot.Get()]->SetInGame(true);
+}
+
+void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
+{
+	uint64 iSteamId = pResponse->m_SteamID.ConvertToUint64();
+	for (int i = 0; i < 64; i++)
+	{
+		if (!m_Players[i] || m_Players[i]->IsFakeClient() || !(m_Players[i]->GetUnauthenticatedSteamId64() == iSteamId))
+			continue;
+
+		switch (pResponse->m_eAuthSessionResponse)
+		{
+			case k_EAuthSessionResponseOK:
+			{
+				m_Players[i]->SetAuthenticated(true);
+				m_Players[i]->SetSteamId(m_Players[i]->GetUnauthenticatedSteamId());
+				g_pPlayersApi->SendClientAuthCallback(i, iSteamId);
+				return;
+			}
+
+			case k_EAuthSessionResponseAuthTicketInvalid:
+			case k_EAuthSessionResponseAuthTicketInvalidAlreadyUsed:
+			{
+				if (!g_iDelayAuthFailKick)
+					return;
+
+				g_pUtilsApi->PrintToChat(i, g_vecPhrases["AuthTicketInvalid"].c_str());
+				[[fallthrough]];
+			}
+
+			default:
+			{
+				if (!g_iDelayAuthFailKick)
+					return;
+
+				g_pUtilsApi->PrintToChat(i, g_vecPhrases["AuthFailed"].c_str(), g_iDelayAuthFailKick);
+
+				new CTimer(g_iDelayAuthFailKick, [i]()
+				{
+					engine->DisconnectClient(i, NETWORK_DISCONNECT_KICKED_NOSTEAMLOGIN);
+					return -1.f;
+				});
+			}
+		}
+	}
 }
 
 void UtilsApi::LoadTranslations(const char* FileName)
@@ -383,8 +494,9 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 		}
 		else
 		{
+			int iItems = size(hMenu.hItems);
 			int iItem = hMenuPlayer.iList*5+iButton-1;
-			if(hMenu.hItems.size() <= iItem) return 1;
+			if(iItems <= iItem) return 1;
 			if(hMenu.hItems[iItem].iType != 1) return 1;
 			if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
 		}
@@ -455,6 +567,8 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 
 void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID )
 {
+	delete m_Players[slot.Get()];
+	m_Players[slot.Get()] = nullptr;
 	if (xuid == 0)
     	return;
 
@@ -549,7 +663,7 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 				if(hMenuPlayer.iList == 0 && !hMenu.bBack) iC++;
 				if(l == hMenu.hItems.size()-1)
 				{
-					for (size_t i = 0; i < iC-iCount; i++)
+					for (int i = 0; i < iC-iCount; i++)
 					{
 						g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
 					}
@@ -597,6 +711,23 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 	}
 }
 
+std::string MenusApi::escapeString(const std::string& input) {
+    std::string escaped;
+    for (char c : input) {
+        switch (c) {
+            case '\\': escaped += "\\\\"; break;
+            case '\"': escaped += "\\\""; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            case '<': escaped += "&lt;"; break;
+            case '>': escaped += "&gt;"; break;
+            default: escaped += c; break;
+        }
+    }
+    return escaped;
+}
+
 void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, int iType = 1)
 {
 	if(iType != 0)
@@ -604,7 +735,7 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 		Items hItem;
 		hItem.iType = iType;
 		hItem.sBack = std::string(sBack);
-		hItem.sText = std::string(sText);
+		hItem.sText = escapeString(sText);
 		hMenu.hItems.push_back(hItem);
 	}
 }
@@ -816,12 +947,9 @@ const char* UtilsApi::GetLanguage()
 void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, int32 nArrayIndex = -1)
 {
     CEntityInstance* pEntity = *reinterpret_cast<CEntityInstance**>(networkVarChainer);
-    if (pEntity)
-    {
-		if((pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
-		{
-			pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
-		}
+    if (pEntity && (pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
+	{
+		pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
     }
 }
 
@@ -844,6 +972,8 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
+			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+			CEntity->m_isSteadyState().ClearAll();
 		}
 		else
 		{
@@ -856,7 +986,69 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
+			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
+			CEntity->m_isSteadyState().ClearAll();
 		}
+	}
+}
+
+std::string formatCurrentTime() {
+    std::time_t currentTime = std::time(nullptr);
+    std::tm* localTime = std::localtime(&currentTime);
+    std::ostringstream formattedTime;
+    formattedTime << std::put_time(localTime, "%m/%d/%Y - %H:%M:%S");
+    return formattedTime.str();
+}
+
+std::string formatCurrentTime2() {
+    std::time_t currentTime = std::time(nullptr);
+    std::tm* localTime = std::localtime(&currentTime);
+    std::ostringstream formattedTime;
+    formattedTime << std::put_time(localTime, "error_%m-%d-%Y");
+    return formattedTime.str();
+}
+
+void UtilsApi::LogToFile(const char* filename, const char* msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[1024];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	char szPath[256], szBuffer[2048];
+	g_SMAPI->PathFormat(szPath, sizeof(szPath), "%s/addons/logs/%s.txt", g_SMAPI->GetBaseDir(), filename);
+	g_SMAPI->Format(szBuffer, sizeof(szBuffer), "L %s: %s\n", formatCurrentTime().c_str(), buf);
+	Msg("%s\n", szBuffer);
+	FILE* pFile = fopen(szPath, "a");
+	if (pFile)
+	{
+		fputs(szBuffer, pFile);
+		fclose(pFile);
+	}
+}
+
+void UtilsApi::ErrorLog(const char* msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[1024];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	ConColorMsg(Color(255, 0, 0, 255), "[Error] %s\n", buf);
+
+	char szPath[256], szBuffer[2048];
+	g_SMAPI->PathFormat(szPath, sizeof(szPath), "%s/addons/logs/%s.txt", g_SMAPI->GetBaseDir(), formatCurrentTime2().c_str());
+	g_SMAPI->Format(szBuffer, sizeof(szBuffer), "L %s: %s\n", formatCurrentTime().c_str(), buf);
+
+	FILE* pFile = fopen(szPath, "a");
+	if (pFile)
+	{
+		fputs(szBuffer, pFile);
+		fclose(pFile);
 	}
 }
 
@@ -868,7 +1060,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.3.3";
+	return "1.4";
 }
 
 const char* Menus::GetDate()

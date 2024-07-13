@@ -45,4 +45,16 @@
 		"ru"		"<font color='red'>[!9]</font> Выход<br/>"
 		"en"		"<font color='red'>[!9]</font> Exit<br/>"
 	}
+
+	"AuthTicketInvalid"
+	{
+		"ru"		" {LIGHTRED}Ваша аутентификация в Steam не удалась из-за недействительного или использованного билета. Возможно, вам придется перезапустить клиент Steam, чтобы исправить ситуацию."
+		"en"		" {LIGHTRED}Your Steam authentication failed due to an invalid or used ticket. You may have to restart your Steam client in order to fix this."
+	}
+
+	"AuthFailed"
+	{
+		"ru"		"  {LIGHTRED}ПРЕДУПРЕЖДЕНИЕ: Вы будете кикнуты через %i секунд из-за неудачной аутентификации в Steam."
+		"en"		"  {LIGHTRED}WARNING: You will be kicked in %i seconds due to failed Steam authentication."
+	}
 }

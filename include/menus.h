@@ -4,10 +4,25 @@
 #include <string>
 
 /////////////////////////////////////////////////////////////////
-///////////////////////      MYSQL     //////////////////////////
+///////////////////////      PLAYERS     //////////////////////////
 /////////////////////////////////////////////////////////////////
 
+typedef std::function<void(int iSlot, uint64 iSteamID64)> OnClientAuthorizedCallback;
 
+#define PLAYERS_INTERFACE "IPlayersApi"
+class IPlayersApi
+{
+public:
+    virtual bool IsFakeClient(int iSlot) = 0;
+    virtual bool IsAuthenticated(int iSlot) = 0;
+    virtual bool IsConnected(int iSlot) = 0;
+    virtual bool IsInGame(int iSlot) = 0;
+    virtual const char* GetIpAddress(int iSlot) = 0;
+    virtual uint64 GetSteamID64(int iSlot) = 0;
+    virtual const CSteamID* GetSteamID(int iSlot) = 0;
+
+    virtual void HookOnClientAuthorized(SourceMM::PluginId id, OnClientAuthorizedCallback callback) = 0;
+};
 
 /////////////////////////////////////////////////////////////////
 ///////////////////////      UTILS     //////////////////////////
@@ -55,6 +70,9 @@ public:
 	virtual void PrintToCenterAll(const char* msg, ...) = 0;
 	virtual void PrintToCenterHtml(int iSlot, int iDuration, const char* msg, ...) = 0;
 	virtual void PrintToCenterHtmlAll(int iDuration, const char* msg, ...) = 0;
+
+    virtual void LogToFile(const char* szFile, const char* szText, ...) = 0;
+    virtual void ErrorLog(const char* msg, ...) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -103,6 +121,7 @@ public:
 	virtual void SetTitleMenu(Menu& hMenu, const char* szTitle) = 0;
 	virtual void SetCallback(Menu& hMenu, MenuCallbackFunc func) = 0;
     virtual void ClosePlayerMenu(int iSlot) = 0;
+    virtual std::string escapeString(const std::string& input) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
