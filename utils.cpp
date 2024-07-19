@@ -262,6 +262,23 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_pUtilsApi->LoadTranslations("menus.phrases");
 
+	new CTimer(1.0f, []()
+	{
+		for(int i = 0; i < 64; i++)
+		{
+			if (!m_Players[i] || m_Players[i]->IsFakeClient() || m_Players[i]->IsAuthenticated())
+				continue;
+			
+			if(engine->IsClientFullyAuthenticated(CPlayerSlot(i)))
+			{
+				m_Players[i]->SetAuthenticated(true);
+				m_Players[i]->SetSteamId(m_Players[i]->GetUnauthenticatedSteamId());
+				g_pPlayersApi->SendClientAuthCallback(i, m_Players[i]->GetUnauthenticatedSteamId64());
+			}
+		}
+		return 1.0f;
+	});
+
 	return true;
 }
 
@@ -330,11 +347,12 @@ void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
 	{
 		if (!m_Players[i] || m_Players[i]->IsFakeClient() || !(m_Players[i]->GetUnauthenticatedSteamId64() == iSteamId))
 			continue;
-
 		switch (pResponse->m_eAuthSessionResponse)
 		{
 			case k_EAuthSessionResponseOK:
 			{
+				if(m_Players[i]->IsAuthenticated())
+					return;
 				m_Players[i]->SetAuthenticated(true);
 				m_Players[i]->SetSteamId(m_Players[i]->GetUnauthenticatedSteamId());
 				g_pPlayersApi->SendClientAuthCallback(i, iSteamId);
@@ -569,6 +587,7 @@ void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason re
 {
 	delete m_Players[slot.Get()];
 	m_Players[slot.Get()] = nullptr;
+
 	if (xuid == 0)
     	return;
 

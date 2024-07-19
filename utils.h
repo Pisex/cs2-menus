@@ -287,42 +287,63 @@ class PlayersApi : public IPlayersApi
 {
 public:
 	bool IsFakeClient(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return true;
+		}
 		if(m_Players[iSlot] == nullptr)
-			return false;
+			return true;
 		else
 			return m_Players[iSlot]->IsFakeClient();
 	}
 	bool IsAuthenticated(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return false;
+		}
 		if(m_Players[iSlot] == nullptr)
 			return false;
 		else
 			return m_Players[iSlot]->IsAuthenticated();
 	}
 	bool IsConnected(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return false;
+		}
 		if(m_Players[iSlot] == nullptr)
 			return false;
 		else
 			return m_Players[iSlot]->IsConnected();
 	}
 	bool IsInGame(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return false;
+		}
 		if(m_Players[iSlot] == nullptr)
 			return false;
 		else
 			return m_Players[iSlot]->IsInGame();
 	}
 	const char* GetIpAddress(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return "";
+		}
 		if(m_Players[iSlot] == nullptr)
 			return "";
 		else
 			return m_Players[iSlot]->GetIpAddress();
 	}
 	uint64 GetSteamID64(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return 0;
+		}
 		if(m_Players[iSlot] == nullptr)
 			return 0;
 		else
 			return m_Players[iSlot]->GetSteamId64();
 	}
 	const CSteamID* GetSteamID(int iSlot) {
+		if (iSlot < 0 || iSlot >= 64) {
+			return nullptr;
+		}
 		if(m_Players[iSlot] == nullptr)
 			return nullptr;
 		else
