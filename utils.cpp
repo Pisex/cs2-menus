@@ -14,6 +14,7 @@ CGlobalVars* gpGlobals = nullptr;
 IVEngineServer2* engine = nullptr;
 CCSGameRules* g_pGameRules = nullptr;
 CEntitySystem* g_pEntitySystem = nullptr;
+IGameEventSystem* g_gameEventSystem = nullptr;
 IGameEventManager2* gameeventmanager = nullptr;
 CGameEntitySystem* g_pGameEntitySystem = nullptr;
 INetworkGameServer* g_pNetworkGameServer = nullptr;
@@ -21,6 +22,124 @@ INetworkGameServer* g_pNetworkGameServer = nullptr;
 float g_flUniversalTime;
 float g_flLastTickedTime;
 bool g_bHasTicked;
+
+
+class CRecipientFilter : public IRecipientFilter
+{
+public:
+	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
+
+	~CRecipientFilter() override {}
+
+	NetChannelBufType_t GetNetworkBufType(void) const override
+	{
+		return m_nBufType;
+	}
+
+	bool IsInitMessage(void) const override
+	{
+		return m_bInitMessage;
+	}
+
+	int GetRecipientCount(void) const override
+	{
+		return m_Recipients.Count();
+	}
+
+	CPlayerSlot GetRecipientIndex(int slot) const override
+	{
+		if (slot < 0 || slot >= GetRecipientCount())
+		{
+			return CPlayerSlot(-1);
+		}
+
+		return m_Recipients[slot];
+	}
+
+	void AddRecipient(CPlayerSlot slot)
+	{
+		// Don't add if it already exists
+		if (m_Recipients.Find(slot) != m_Recipients.InvalidIndex())
+		{
+			return;
+		}
+
+		m_Recipients.AddToTail(slot);
+	}
+
+	void AddAllPlayers()
+	{
+		m_Recipients.RemoveAll();
+		if (!GameEntitySystem())
+		{
+			return;
+		}
+		for (int i = 0; i <= gpGlobals->maxClients; i++)
+		{
+			CBaseEntity *ent = static_cast<CBaseEntity *>(GameEntitySystem()->GetEntityInstance(CEntityIndex(i)));
+			if (ent)
+			{
+				AddRecipient(i);
+			}
+		}
+	}
+
+private:
+	// Can't copy this unless we explicitly do it!
+	CRecipientFilter(CRecipientFilter const &source)
+	{
+		Assert(0);
+	}
+
+	NetChannelBufType_t m_nBufType;
+	bool m_bInitMessage;
+	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
+};
+
+class CBroadcastRecipientFilter : public CRecipientFilter
+{
+public:
+	CBroadcastRecipientFilter(void)
+	{
+		AddAllPlayers();
+	}
+};
+
+class CSingleRecipientFilter : public IRecipientFilter
+{
+public:
+	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
+		: m_nBufType(nBufType), m_bInitMessage(bInitMessage), m_iRecipient(iRecipient)
+	{
+	}
+
+	~CSingleRecipientFilter() override {}
+
+	NetChannelBufType_t GetNetworkBufType(void) const override
+	{
+		return m_nBufType;
+	}
+
+	bool IsInitMessage(void) const override
+	{
+		return m_bInitMessage;
+	}
+
+	int GetRecipientCount(void) const override
+	{
+		return 1;
+	}
+
+	CPlayerSlot GetRecipientIndex(int slot) const override
+	{
+		return CPlayerSlot(m_iRecipient);
+	}
+
+private:
+	NetChannelBufType_t m_nBufType;
+	bool m_bInitMessage;
+	int m_iRecipient;
+};
 
 CGameEntitySystem* GameEntitySystem()
 {
@@ -62,11 +181,13 @@ SH_DECL_HOOK4_void(IServerGameClients, ClientPutInServer, SH_NOATTRIB, 0, CPlaye
 SH_DECL_HOOK6_void(IServerGameClients, OnClientConnected, SH_NOATTRIB, 0, CPlayerSlot, const char*, uint64, const char *, const char *, bool);
 SH_DECL_HOOK6(IServerGameClients, ClientConnect, SH_NOATTRIB, 0, bool, CPlayerSlot, const char*, uint64, const char *, bool, CBufferString *);
 
-void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
-void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
-
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
+void (*UTIL_SetModel)(CBaseModelEntity*, const char* szModel) = nullptr;
+void (*UTIL_DispatchSpawn)(CEntityInstance*, CEntityKeyValues*) = nullptr;
+CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
+void (*UTIL_Remove)(CEntityInstance*) = nullptr;
+void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -158,69 +279,23 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
+	g_SMAPI->AddListener( this, this );
 
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pCVar, ICvar, CVAR_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetEngineFactory, g_pSchemaSystem, ISchemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetServerFactory, g_pSource2Server, ISource2Server, SOURCE2SERVER_INTERFACE_VERSION);
+	GET_V_IFACE_ANY(GetEngineFactory, g_gameEventSystem, IGameEventSystem, GAMEEVENTSYSTEM_INTERFACE_VERSION);
+	GET_V_IFACE_ANY(GetEngineFactory, g_pNetworkMessages, INetworkMessages, NETWORKMESSAGES_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameClients, IServerGameClients, SOURCE2GAMECLIENTS_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceServiceServer, IGameResourceService, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
 
-	CModule libserver(g_pSource2Server);
-	UTIL_ClientPrint = libserver.FindPattern(WIN_LINUX("48 85 C9 0F 84 2A 2A 2A 2A 48 8B C4 48 89 58 18", "55 48 89 E5 41 57 49 89 CF 41 56 49 89 D6 41 55 41 89 F5 41 54 4C 8D A5 A0 FE FF FF")).RCast< decltype(UTIL_ClientPrint) >();
-	if (!UTIL_ClientPrint)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_ClientPrint", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		return false;
-	}
-	
-	UTIL_ClientPrintAll = libserver.FindPattern(WIN_LINUX("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 70 01 2A 2A 8B E9", "55 48 89 E5 41 57 49 89 D7 41 56 49 89 F6 41 55 41 89 FD")).RCast< decltype(UTIL_ClientPrintAll) >();
-	if (!UTIL_ClientPrintAll)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_ClientPrintAll", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		return false;
-	}
-
-	UTIL_SayTeam = libserver.FindPattern("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_SayTeam) >();
-	if (!UTIL_SayTeam)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_SayTeam", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		return false;
-	}
-	m_SayTeamHook = funchook_create();
-	funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
-	funchook_install(m_SayTeamHook, 0);
-
-	UTIL_Say = libserver.FindPattern("55 48 89 E5 41 56 41 55 49 89 F5 41 54 49 89 FC 53 48 83 EC 10 48 8D 05").RCast< decltype(UTIL_Say) >();
-	if (!UTIL_Say)
-	{
-		V_strncpy(error, "Failed to find function to get UTIL_Say", maxlen);
-		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
-		return false;
-	}
-	m_SayHook = funchook_create();
-	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
-	funchook_install(m_SayHook, 0);
-
-	auto gameEventManagerFn = libserver.FindPattern( "55 31 C9 BA ? ? ? ? 48 89 E5 41 56 49 89 FE 41 55 49 89 F5 41 54 48 8D 35 ? ? ? ? 53");
-	if( !gameEventManagerFn ) {
-		snprintf( error, maxlen, "Not found func to get g_pGameEventManager" );
-		return false;
-	}
-	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
-	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
-
-	g_SMAPI->AddListener( this, this );
-
-	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK_MEMFUNC(ICvar, DispatchConCommand, g_pCVar, this, &Menus::OnDispatchConCommand, false);
 	SH_ADD_HOOK(IServerGameDLL, GameFrame, g_pSource2Server, SH_MEMBER(this, &Menus::GameFrame), true);
 	SH_ADD_HOOK(IServerGameClients, ClientCommand, g_pSource2GameClients, SH_MEMBER(this, &Menus::ClientCommand), false);
+	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &Menus::OnGameServerSteamAPIActivated), false);
 	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientDisconnect), true);
 	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
@@ -232,20 +307,6 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_pEntitySystem = GameEntitySystem();
 		gpGlobals = engine->GetServerGlobals();
 	}
-
-	KeyValues::AutoDelete g_kvCore("Core");
-	const char *pszPath = "addons/configs/core.cfg";
-
-	if (!g_kvCore->LoadFromFile(g_pFullFileSystem, pszPath))
-	{
-		Warning("Failed to load %s\n", pszPath);
-		return false;
-	}
-
-	g_SMAPI->Format(szLanguage, sizeof(szLanguage), "%s", g_kvCore->GetString("ServerLang", "en"));
-	g_iMenuType = g_kvCore->GetInt("MenuType", 0);
-	g_iMenuTime = g_kvCore->GetInt("MenuTime", 60);
-	g_iDelayAuthFailKick = g_kvCore->GetInt("delay_auth_fail_kick", 30);
 
 	//0 - в чат
 	//1 - также как в чат но в центр
@@ -260,7 +321,93 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	g_pPlayersApi = new PlayersApi();
 	g_pPlayersCore = g_pPlayersApi;
 
+	{
+		KeyValues::AutoDelete g_kvCore("Core");
+		const char *pszPath = "addons/configs/core.cfg";
+
+		if (!g_kvCore->LoadFromFile(g_pFullFileSystem, pszPath))
+		{
+			g_pUtilsApi->ErrorLog("[%s] Failed to load %s\n", g_PLAPI->GetLogTag(), pszPath);
+			return false;
+		}
+
+		g_SMAPI->Format(szLanguage, sizeof(szLanguage), "%s", g_kvCore->GetString("ServerLang", "en"));
+		g_iMenuType = g_kvCore->GetInt("MenuType", 0);
+		g_iMenuTime = g_kvCore->GetInt("MenuTime", 60);
+		g_iDelayAuthFailKick = g_kvCore->GetInt("delay_auth_fail_kick", 30);
+	}
+
 	g_pUtilsApi->LoadTranslations("menus.phrases");
+
+	KeyValues::AutoDelete g_kvSigs("Gamedata");
+	const char *pszPath = "addons/configs/signatures.ini";
+
+	if (!g_kvSigs->LoadFromFile(g_pFullFileSystem, pszPath))
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to load %s\n", g_PLAPI->GetLogTag(), pszPath);
+		return false;
+	}
+	const char* pszSay = g_kvSigs->GetString("UTIL_Say");
+	CModule libserver(g_pSource2Server);
+	UTIL_SayTeam = libserver.FindPattern(pszSay).RCast< decltype(UTIL_SayTeam) >();
+	if (!UTIL_SayTeam)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Say", g_PLAPI->GetLogTag());
+		return false;
+	}
+	m_SayTeamHook = funchook_create();
+	funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
+	funchook_install(m_SayTeamHook, 0);
+
+	UTIL_Say = libserver.FindPattern(pszSay).RCast< decltype(UTIL_Say) >();
+	if (!UTIL_Say)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Say", g_PLAPI->GetLogTag());
+		return false;
+	}
+	m_SayHook = funchook_create();
+	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
+	funchook_install(m_SayHook, 0);
+
+	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
+	if (!UTIL_SetModel)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get CBaseModelEntity_SetModel", g_PLAPI->GetLogTag());
+		return false;
+	}
+
+	UTIL_AcceptInput = libserver.FindPattern(g_kvSigs->GetString("UTIL_AcceptInput")).RCast< decltype(UTIL_AcceptInput) >();
+	if (!UTIL_AcceptInput)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_AcceptInput", g_PLAPI->GetLogTag());
+		return false;
+	}
+	UTIL_Remove = libserver.FindPattern(g_kvSigs->GetString("UTIL_Remove")).RCast< decltype(UTIL_Remove) >();
+	if (!UTIL_Remove)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Remove", g_PLAPI->GetLogTag());
+		return false;
+	}
+	UTIL_DispatchSpawn = libserver.FindPattern(g_kvSigs->GetString("UTIL_DispatchSpawn")).RCast< decltype(UTIL_DispatchSpawn) >();
+	if (!UTIL_DispatchSpawn)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_DispatchSpawn", g_PLAPI->GetLogTag());
+		return false;
+	}
+	UTIL_CreateEntity = libserver.FindPattern(g_kvSigs->GetString("UTIL_CreateEntity")).RCast< decltype(UTIL_CreateEntity) >();
+	if (!UTIL_CreateEntity)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_CreateEntity", g_PLAPI->GetLogTag());
+		return false;
+	}
+
+	auto gameEventManagerFn = libserver.FindPattern(g_kvSigs->GetString("GetGameEventManager"));
+	if( !gameEventManagerFn ) {
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetGameEventManager", g_PLAPI->GetLogTag());
+		return false;
+	}
+	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
+	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 
 	new CTimer(1.0f, []()
 	{
@@ -775,6 +922,21 @@ void MenusApi::ClosePlayerMenu(int iSlot)
 	}
 }
 
+void ClientPrintFilter(IRecipientFilter *filter, int msg_dest, const char *msg_name, const char *param1, const char *param2, const char *param3, const char *param4)
+{
+	INetworkMessageInternal *netmsg = g_pNetworkMessages->FindNetworkMessagePartial("TextMsg");
+	auto msg = netmsg->AllocateMessage()->ToPB<CUserMessageTextMsg>();
+	msg->set_dest(msg_dest);
+	msg->add_param(msg_name);
+	msg->add_param(param1);
+	msg->add_param(param2);
+	msg->add_param(param3);
+	msg->add_param(param4);
+
+	g_gameEventSystem->PostEventAbstract(0, false, filter, netmsg, msg, 0);
+	netmsg->DeallocateMessage(msg);
+}
+
 void UtilsApi::PrintToChatAll(const char *msg, ...)
 {
 	va_list args;
@@ -785,7 +947,10 @@ void UtilsApi::PrintToChatAll(const char *msg, ...)
 	va_end(args);
 
 	std::string colorizedBuf = Colorizer(buf);
-	UTIL_ClientPrintAll(3, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+
+	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+
 }
 
 void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
@@ -806,9 +971,12 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 
 	std::string colorizedBuf = Colorizer(buf);
 
-	g_pUtilsApi->NextFrame([pPlayerController, colorizedBuf](){
+	g_pUtilsApi->NextFrame([iSlot, pPlayerController, colorizedBuf](){
 		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
-			UTIL_ClientPrint(pPlayerController, 3, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+		{
+			CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+			ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+		}
 	});
 }
 
@@ -821,7 +989,8 @@ void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	engine->ClientPrintf(iSlot, buf);
+	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToConsoleAll(const char *msg, ...)
@@ -833,7 +1002,8 @@ void UtilsApi::PrintToConsoleAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	UTIL_ClientPrintAll(2, buf, nullptr, nullptr, nullptr, nullptr);
+	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
@@ -852,10 +1022,8 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 		return;
 	}
 
-	g_pUtilsApi->NextFrame([pPlayerController, buf](){
-		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
-			UTIL_ClientPrint(pPlayerController, 4, buf, nullptr, nullptr, nullptr, nullptr);
-	});
+	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenterAll(const char *msg, ...)
@@ -867,7 +1035,41 @@ void UtilsApi::PrintToCenterAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	UTIL_ClientPrintAll(4, buf, nullptr, nullptr, nullptr, nullptr);
+	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+}
+
+void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
+	{
+		ConMsg("%s\n", buf);
+		return;
+	}
+
+	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+}
+
+void UtilsApi::PrintToAlertAll(const char *msg, ...)
+{
+	va_list args;
+	va_start(args, msg);
+
+	char buf[512];
+	V_vsnprintf(buf, sizeof(buf), msg, args);
+	va_end(args);
+
+	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
@@ -927,6 +1129,40 @@ void UtilsApi::PrintToCenterHtmlAll(int iDuration, const char *msg, ...)
 	});
 }
 
+void UtilsApi::SetEntityModel(CBaseModelEntity* pEntity, const char* szModel)
+{
+	if(pEntity)
+	{
+		UTIL_SetModel(pEntity, szModel);
+	}
+}
+
+void UtilsApi::DispatchSpawn(CEntityInstance* pEntity, CEntityKeyValues* pKeyValues)
+{
+	if(pEntity)
+	{
+		UTIL_DispatchSpawn(pEntity, pKeyValues);
+	}
+}
+
+CBaseEntity* UtilsApi::CreateEntityByName(const char* pClassName, CEntityIndex iForceEdictIndex)
+{
+	return UTIL_CreateEntity(pClassName, iForceEdictIndex);
+}
+
+void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
+{
+	if(pEntity)
+	{
+		UTIL_Remove(pEntity);
+	}
+}
+
+void UtilsApi::AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller)
+{
+    UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0);
+}
+
 void UtilsApi::NextFrame(std::function<void()> fn)
 {
 	m_nextFrame.push_back(fn);
@@ -978,9 +1214,7 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 	{
 		if(g_Offsets[sClassName][sFieldName] == 0 || g_ChainOffsets[sClassName][sFieldName] == 0)
 		{
-			static const auto datatable_hash = hash_32_fnv1a_const(sClassName);
-			static const auto prop_hash = hash_32_fnv1a_const(sFieldName);
-			int offset = schema::GetOffset(sClassName, datatable_hash, sFieldName, prop_hash).offset;
+			int offset = schema::GetServerOffset(sClassName, sFieldName);
 			g_Offsets[sClassName][sFieldName] = offset;
 			int chainOffset = schema::FindChainOffset(sClassName);
 			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
@@ -1005,8 +1239,6 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
-			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-			CEntity->m_isSteadyState().ClearAll();
 		}
 	}
 }
@@ -1079,7 +1311,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.4";
+	return "1.5";
 }
 
 const char* Menus::GetDate()

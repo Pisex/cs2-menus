@@ -73,6 +73,13 @@ public:
 
     virtual void LogToFile(const char* szFile, const char* szText, ...) = 0;
     virtual void ErrorLog(const char* msg, ...) = 0;
+    virtual void PrintToAlert(int iSlot, const char *msg, ...) = 0;
+	virtual void PrintToAlertAll(const char *msg, ...) = 0;
+    virtual void SetEntityModel(CBaseModelEntity* pEntity, const char* szModel) = 0;
+    virtual void DispatchSpawn(CEntityInstance* pEntity, CEntityKeyValues*) = 0;
+    virtual CBaseEntity* CreateEntityByName(const char *pClassName, CEntityIndex iForceEdictIndex) = 0;
+    virtual void RemoveEntity(CEntityInstance* pEntity) = 0;
+    virtual void AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value = variant_t(""), CEntityInstance *pActivator = nullptr, CEntityInstance *pCaller = nullptr) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

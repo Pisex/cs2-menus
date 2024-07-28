@@ -8,6 +8,7 @@
 #include <iserver.h>
 #include <entity2/entitysystem.h>
 #include <steam/steam_gameserver.h>
+#include "irecipientfilter.h"
 #include "igameevents.h"
 #include "entitysystem.h"
 #include "vector.h"
@@ -17,6 +18,11 @@
 #include <utlstring.h>
 #include <KeyValues.h>
 #include "CCSPlayerController.h"
+#include "igameeventsystem.h"
+#include <networksystem/inetworkserializer.h>
+#include <networksystem/inetworkmessages.h>
+#include <networksystem/netmessage.h>
+#include "usermessages.pb.h"
 #include "CGameRules.h"
 #include "module.h"
 #include "ctimer.h"
@@ -28,7 +34,6 @@
 #include <array>
 #include <thread>
 
-
 class Menus final : public ISmmPlugin, public IMetamodListener
 {
 public:
@@ -36,7 +41,6 @@ public:
 	bool Unload(char* error, size_t maxlen);
 	void* OnMetamodQuery(const char* iface, int* ret);
 	bool FireEvent(IGameEvent* pEvent, bool bDontBroadcast);
-	
 	STEAM_GAMESERVER_CALLBACK_MANUAL(Menus, OnValidateAuthTicket, ValidateAuthTicketResponse_t, m_CallbackValidateAuthTicketResponse);
 private:
 	const char* GetAuthor();
@@ -207,7 +211,16 @@ public:
 		}
 		return bFound;
 	}
+
+	void PrintToAlert(int iSlot, const char *msg, ...);
+	void PrintToAlertAll(const char *msg, ...);
 	
+	void SetEntityModel(CBaseModelEntity*, const char* szModel);
+	void DispatchSpawn(CEntityInstance* pEntity, CEntityKeyValues* pKeyValues);
+	CBaseEntity* CreateEntityByName(const char *pClassName, CEntityIndex iForceEdictIndex);
+	void RemoveEntity(CEntityInstance* pEntity);
+	void AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller);
+
 	void ClearAllHooks(SourceMM::PluginId id) override {
 		ConsoleCommands[id].clear();
 		ChatCommands[id].clear();
@@ -368,42 +381,54 @@ private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };
 
+enum MsgDest : int32_t
+{
+	HUD_PRINTNOTIFY = 1,
+	HUD_PRINTCONSOLE = 2,
+	HUD_PRINTTALK = 3,
+	HUD_PRINTCENTER = 4,
+	HUD_PRINTTALK2 = 5, // Not sure what the difference between this and HUD_PRINTTALK is...
+	HUD_PRINTALERT = 6
+};
+
 const std::string colors_text[] = {
-	"{DEFAULT}",
-	"{WHITE}",
-	"{RED}",
-	"{LIGHTPURPLE}",
-	"{GREEN}",
-	"{LIME}",
-	"{LIGHTGREEN}",
-	"{LIGHTRED}",
-	"{GRAY}",
-	"{LIGHTOLIVE}",
-	"{OLIVE}",
-	"{LIGHTBLUE}",
-	"{BLUE}",
-	"{PURPLE}",
-	"{GRAYBLUE}",
-	"\\n"
+    "{DEFAULT}",
+    "{WHITE}",
+    "{RED}",
+    "{LIGHTPURPLE}",
+    "{GREEN}",
+    "{LIME}",
+    "{LIGHTGREEN}",
+    "{DARKRED}",
+    "{GRAY}",
+    "{LIGHTOLIVE}",
+    "{OLIVE}",
+    "{LIGHTBLUE}",
+    "{BLUE}",
+    "{PURPLE}",
+    "{LIGHTRED}",
+    "{GRAYBLUE}",
+    "\\n"
 };
 
 const std::string colors_hex[] = {
-	"\x01",
-	"\x01",
-	"\x02",
-	"\x03",
-	"\x04",
-	"\x05",
-	"\x06",
-	"\x07",
-	"\x08",
-	"\x09",
-	"\x10",
-	"\x0B",
-	"\x0C",
-	"\x0E",
-	"\x0A",
-	"\xe2\x80\xa9"
+    "\x01",
+    "\x01",
+    "\x02",
+    "\x03",
+    "\x04",
+    "\x05",
+    "\x06",
+    "\x07",
+    "\x08",
+    "\x09",
+    "\x10",
+    "\x0B",
+    "\x0C",
+    "\x0E",
+    "\x0F",
+    "\x0A",
+    "\xe2\x80\xa9"
 };
 
 #endif //_INCLUDE_METAMOD_SOURCE_STUB_PLUGIN_H_
