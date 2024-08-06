@@ -99,6 +99,8 @@ public:
 	void PrintToCenterHtmlAll(int iDuration, const char* msg, ...);
 	void LogToFile(const char* szFile, const char* szText, ...);
 	void ErrorLog(const char* msg, ...);
+	CTimer* CreateTimer(float flInterval, std::function<float()> func);
+	void RemoveTimer(CTimer* pTimer);
 	
 	void StartupServer(SourceMM::PluginId id, StartupCallback fn) override {
 		StartupHook[id].push_back(fn);

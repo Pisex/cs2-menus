@@ -276,6 +276,64 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 	return nullptr;
 }
 
+int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
+{
+	if(!pController) return 0;
+	auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
+	auto& hMenu = hMenuPlayer.hMenu;
+	if(hMenuPlayer.bEnabled)
+	{
+		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
+		if(iButton == 9 && hMenu.bExit)
+		{
+			hMenuPlayer.iList = 0;
+			hMenuPlayer.bEnabled = false;
+			if(g_iMenuType == 0)
+			{
+				for (size_t i = 0; i < 8; i++)
+				{
+					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
+				}
+			}
+			if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iSlot);
+			hMenuPlayer.hMenu = Menu();
+		}
+		else if(iButton == 8)
+		{
+			int iItems = size(hMenu.hItems) / 5;
+			if (size(hMenu.hItems) % 5 > 0) iItems++;
+			if(iItems > hMenuPlayer.iList+1)
+			{
+				hMenuPlayer.iList++;
+				g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+				if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
+			}
+		}
+		else if(iButton == 7)
+		{
+			if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
+			{
+				if(hMenuPlayer.iList != 0)
+				{
+					hMenuPlayer.iList--;
+					g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+				}
+				else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
+			}
+		}
+		else
+		{
+			int iItems = size(hMenu.hItems);
+			int iItem = hMenuPlayer.iList*5+iButton-1;
+			if(iItems <= iItem) return 1;
+			if(hMenu.hItems[iItem].iType != 1) return 1;
+			if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
+		}
+		return 1;
+	}
+	return 0;
+}
+
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
@@ -424,6 +482,43 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 			}
 		}
 		return 1.0f;
+	});
+
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_1"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 1)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_2"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 2)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_3"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 3)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_4"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 4)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_5"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 5)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_6"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 6)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_7"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 7)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_8"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 8)) return true;
+		return false;
+	});
+	g_pUtilsApi->RegCommand(g_PLID, {"mm_9"}, {}, [](int iSlot, const char* szContent){
+		if(g_iMenuType != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
+		return false;
 	});
 
 	return true;
@@ -613,63 +708,6 @@ void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
 	if(bFound) RETURN_META(MRES_SUPERCEDE);
 }
 
-int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
-{
-	auto& hMenuPlayer = g_MenuPlayer[pController->m_steamID()];
-	auto& hMenu = hMenuPlayer.hMenu;
-	if(hMenuPlayer.bEnabled)
-	{
-		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
-		if(iButton == 9 && hMenu.bExit)
-		{
-			hMenuPlayer.iList = 0;
-			hMenuPlayer.bEnabled = false;
-			if(g_iMenuType == 0)
-			{
-				for (size_t i = 0; i < 8; i++)
-				{
-					g_pUtilsCore->PrintToChat(iSlot, " \x08-\x01");
-				}
-			}
-			if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iSlot);
-			hMenuPlayer.hMenu = Menu();
-		}
-		else if(iButton == 8)
-		{
-			int iItems = size(hMenu.hItems) / 5;
-			if (size(hMenu.hItems) % 5 > 0) iItems++;
-			if(iItems > hMenuPlayer.iList+1)
-			{
-				hMenuPlayer.iList++;
-				g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
-				if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
-			}
-		}
-		else if(iButton == 7)
-		{
-			if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
-			{
-				if(hMenuPlayer.iList != 0)
-				{
-					hMenuPlayer.iList--;
-					g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
-				}
-				else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
-			}
-		}
-		else
-		{
-			int iItems = size(hMenu.hItems);
-			int iItem = hMenuPlayer.iList*5+iButton-1;
-			if(iItems <= iItem) return 1;
-			if(hMenu.hItems[iItem].iType != 1) return 1;
-			if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
-		}
-		return 1;
-	}
-	return 0;
-}
-
 void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandContext& ctx, const CCommand& args)
 {
 	if (!g_pEntitySystem)
@@ -697,7 +735,7 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 				{
 					if(g_iMenuType != 2)
 					{
-						int iButton = std::stoi(arg[0]);
+						int iButton = atoi(arg[0]);
 						if(CheckActionMenu(iCommandPlayerSlot.Get(), pController, iButton))
 							RETURN_META(MRES_SUPERCEDE);
 					}
@@ -1303,6 +1341,19 @@ void UtilsApi::ErrorLog(const char* msg, ...)
 	}
 }
 
+CTimer* UtilsApi::CreateTimer(float flInterval, std::function<float()> func)
+{
+	return new CTimer(flInterval, func);
+}
+
+void UtilsApi::RemoveTimer(CTimer* pTimer)
+{
+	if(pTimer)
+	{
+		pTimer->RemoveTimer();
+	}
+}
+
 ///////////////////////////////////////
 const char* Menus::GetLicense()
 {
@@ -1311,7 +1362,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.5";
+	return "1.6";
 }
 
 const char* Menus::GetDate()
