@@ -24,122 +24,122 @@ float g_flLastTickedTime;
 bool g_bHasTicked;
 
 
-class CRecipientFilter : public IRecipientFilter
-{
-public:
-	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
+// class CRecipientFilter : public IRecipientFilter
+// {
+// public:
+// 	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
 
-	~CRecipientFilter() override {}
+// 	~CRecipientFilter() override {}
 
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
+// 	NetChannelBufType_t GetNetworkBufType(void) const override
+// 	{
+// 		return m_nBufType;
+// 	}
 
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
+// 	bool IsInitMessage(void) const override
+// 	{
+// 		return m_bInitMessage;
+// 	}
 
-	int GetRecipientCount(void) const override
-	{
-		return m_Recipients.Count();
-	}
+// 	int GetRecipientCount(void) const override
+// 	{
+// 		return m_Recipients.Count();
+// 	}
 
-	CPlayerSlot GetRecipientIndex(int slot) const override
-	{
-		if (slot < 0 || slot >= GetRecipientCount())
-		{
-			return CPlayerSlot(-1);
-		}
+// 	CPlayerSlot GetRecipientIndex(int slot) const override
+// 	{
+// 		if (slot < 0 || slot >= GetRecipientCount())
+// 		{
+// 			return CPlayerSlot(-1);
+// 		}
 
-		return m_Recipients[slot];
-	}
+// 		return m_Recipients[slot];
+// 	}
 
-	void AddRecipient(CPlayerSlot slot)
-	{
-		// Don't add if it already exists
-		if (m_Recipients.Find(slot) != m_Recipients.InvalidIndex())
-		{
-			return;
-		}
+// 	void AddRecipient(CPlayerSlot slot)
+// 	{
+// 		// Don't add if it already exists
+// 		if (m_Recipients.Find(slot) != m_Recipients.InvalidIndex())
+// 		{
+// 			return;
+// 		}
 
-		m_Recipients.AddToTail(slot);
-	}
+// 		m_Recipients.AddToTail(slot);
+// 	}
 
-	void AddAllPlayers()
-	{
-		m_Recipients.RemoveAll();
-		if (!GameEntitySystem())
-		{
-			return;
-		}
-		for (int i = 0; i <= gpGlobals->maxClients; i++)
-		{
-			CBaseEntity *ent = static_cast<CBaseEntity *>(GameEntitySystem()->GetEntityInstance(CEntityIndex(i)));
-			if (ent)
-			{
-				AddRecipient(i);
-			}
-		}
-	}
+// 	void AddAllPlayers()
+// 	{
+// 		m_Recipients.RemoveAll();
+// 		if (!GameEntitySystem())
+// 		{
+// 			return;
+// 		}
+// 		for (int i = 0; i <= gpGlobals->maxClients; i++)
+// 		{
+// 			CBaseEntity *ent = static_cast<CBaseEntity *>(GameEntitySystem()->GetEntityInstance(CEntityIndex(i)));
+// 			if (ent)
+// 			{
+// 				AddRecipient(i);
+// 			}
+// 		}
+// 	}
 
-private:
-	// Can't copy this unless we explicitly do it!
-	CRecipientFilter(CRecipientFilter const &source)
-	{
-		Assert(0);
-	}
+// private:
+// 	// Can't copy this unless we explicitly do it!
+// 	CRecipientFilter(CRecipientFilter const &source)
+// 	{
+// 		Assert(0);
+// 	}
 
-	NetChannelBufType_t m_nBufType;
-	bool m_bInitMessage;
-	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
-};
+// 	NetChannelBufType_t m_nBufType;
+// 	bool m_bInitMessage;
+// 	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
+// };
 
-class CBroadcastRecipientFilter : public CRecipientFilter
-{
-public:
-	CBroadcastRecipientFilter(void)
-	{
-		AddAllPlayers();
-	}
-};
+// class CBroadcastRecipientFilter : public CRecipientFilter
+// {
+// public:
+// 	CBroadcastRecipientFilter(void)
+// 	{
+// 		AddAllPlayers();
+// 	}
+// };
 
-class CSingleRecipientFilter : public IRecipientFilter
-{
-public:
-	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
-		: m_nBufType(nBufType), m_bInitMessage(bInitMessage), m_iRecipient(iRecipient)
-	{
-	}
+// class CSingleRecipientFilter : public IRecipientFilter
+// {
+// public:
+// 	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
+// 		: m_nBufType(nBufType), m_bInitMessage(bInitMessage), m_iRecipient(iRecipient)
+// 	{
+// 	}
 
-	~CSingleRecipientFilter() override {}
+// 	~CSingleRecipientFilter() override {}
 
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
+// 	NetChannelBufType_t GetNetworkBufType(void) const override
+// 	{
+// 		return m_nBufType;
+// 	}
 
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
+// 	bool IsInitMessage(void) const override
+// 	{
+// 		return m_bInitMessage;
+// 	}
 
-	int GetRecipientCount(void) const override
-	{
-		return 1;
-	}
+// 	int GetRecipientCount(void) const override
+// 	{
+// 		return 1;
+// 	}
 
-	CPlayerSlot GetRecipientIndex(int slot) const override
-	{
-		return CPlayerSlot(m_iRecipient);
-	}
+// 	CPlayerSlot GetRecipientIndex(int slot) const override
+// 	{
+// 		return CPlayerSlot(m_iRecipient);
+// 	}
 
-private:
-	NetChannelBufType_t m_nBufType;
-	bool m_bInitMessage;
-	int m_iRecipient;
-};
+// private:
+// 	NetChannelBufType_t m_nBufType;
+// 	bool m_bInitMessage;
+// 	int m_iRecipient;
+// };
 
 CGameEntitySystem* GameEntitySystem()
 {
@@ -188,6 +188,10 @@ void (*UTIL_DispatchSpawn)(CEntityInstance*, CEntityKeyValues*) = nullptr;
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_Remove)(CEntityInstance*) = nullptr;
 void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
+
+// Временно
+void (*UTIL_ClientPrint)(CBasePlayerController *player, int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
+void (*UTIL_ClientPrintAll)(int msg_dest, const char* msg_name, const char* param1, const char* param2, const char* param3, const char* param4) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -407,6 +411,29 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	}
 	const char* pszSay = g_kvSigs->GetString("UTIL_Say");
 	CModule libserver(g_pSource2Server);
+
+    // Временно
+    UTIL_ClientPrint = libserver.FindPattern(WIN_LINUX("48 85 C9 0F 84 2A 2A 2A 2A 48 8B C4 48 89 58 18", "55 48 89 E5 41 57 49 89 CF 41 56 49 89 D6 41 55 41 89 F5 41 54 4C 8D A5 A0 FE FF FF")).RCast< decltype(UTIL_ClientPrint) >();
+	if (!UTIL_ClientPrint)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_ClientPrint", maxlen);
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+	
+	UTIL_ClientPrintAll = libserver.FindPattern(WIN_LINUX("48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 81 EC 70 01 2A 2A 8B E9", "55 48 89 E5 41 57 49 89 D7 41 56 49 89 F6 41 55 41 89 FD")).RCast< decltype(UTIL_ClientPrintAll) >();
+	if (!UTIL_ClientPrintAll)
+	{
+		V_strncpy(error, "Failed to find function to get UTIL_ClientPrintAll", sizeof(error));
+		ConColorMsg(Color(255, 0, 0, 255), "[%s] %s\n", GetLogTag(), error);
+		std::string sBuffer = "meta unload "+std::to_string(g_PLID);
+		engine->ServerCommand(sBuffer.c_str());
+		return false;
+	}
+
+
 	UTIL_SayTeam = libserver.FindPattern(pszSay).RCast< decltype(UTIL_SayTeam) >();
 	if (!UTIL_SayTeam)
 	{
@@ -986,9 +1013,9 @@ void UtilsApi::PrintToChatAll(const char *msg, ...)
 
 	std::string colorizedBuf = Colorizer(buf);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
-
+	// CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	// ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+	UTIL_ClientPrintAll(HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
@@ -1012,8 +1039,9 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 	g_pUtilsApi->NextFrame([iSlot, pPlayerController, colorizedBuf](){
 		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
 		{
-			CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-			ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+			UTIL_ClientPrint(pPlayerController, HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+			// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+			// ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
 		}
 	});
 }
@@ -1027,8 +1055,9 @@ void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+    engine->ClientPrintf(iSlot, buf);
 }
 
 void UtilsApi::PrintToConsoleAll(const char *msg, ...)
@@ -1040,8 +1069,9 @@ void UtilsApi::PrintToConsoleAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	// CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	// ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+    UTIL_ClientPrintAll(HUD_PRINTCONSOLE, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
@@ -1060,8 +1090,9 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 		return;
 	}
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+    UTIL_ClientPrint(pPlayerController, HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenterAll(const char *msg, ...)
@@ -1073,8 +1104,10 @@ void UtilsApi::PrintToCenterAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	// CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	// ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+    
+	UTIL_ClientPrintAll(HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
@@ -1093,8 +1126,9 @@ void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
 		return;
 	}
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	UTIL_ClientPrint(pPlayerController, HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToAlertAll(const char *msg, ...)
@@ -1106,8 +1140,10 @@ void UtilsApi::PrintToAlertAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	// CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
+	// ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+    
+	UTIL_ClientPrintAll(HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
@@ -1362,7 +1398,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6";
+	return "1.6f";
 }
 
 const char* Menus::GetDate()
