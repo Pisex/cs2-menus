@@ -411,61 +411,62 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	if (!UTIL_SayTeam)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Say", g_PLAPI->GetLogTag());
-		return false;
 	}
-	m_SayTeamHook = funchook_create();
-	funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
-	funchook_install(m_SayTeamHook, 0);
+	else
+	{
+		m_SayTeamHook = funchook_create();
+		funchook_prepare(m_SayTeamHook, (void**)&UTIL_SayTeam, (void*)SayTeamHook);
+		funchook_install(m_SayTeamHook, 0);
+	}
 
 	UTIL_Say = libserver.FindPattern(pszSay).RCast< decltype(UTIL_Say) >();
 	if (!UTIL_Say)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Say", g_PLAPI->GetLogTag());
-		return false;
 	}
-	m_SayHook = funchook_create();
-	funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
-	funchook_install(m_SayHook, 0);
+	else
+	{
+		m_SayHook = funchook_create();
+		funchook_prepare(m_SayHook, (void**)&UTIL_Say, (void*)SayHook);
+		funchook_install(m_SayHook, 0);
+	}
 
 	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
 	if (!UTIL_SetModel)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get CBaseModelEntity_SetModel", g_PLAPI->GetLogTag());
-		return false;
 	}
 
 	UTIL_AcceptInput = libserver.FindPattern(g_kvSigs->GetString("UTIL_AcceptInput")).RCast< decltype(UTIL_AcceptInput) >();
 	if (!UTIL_AcceptInput)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_AcceptInput", g_PLAPI->GetLogTag());
-		return false;
 	}
 	UTIL_Remove = libserver.FindPattern(g_kvSigs->GetString("UTIL_Remove")).RCast< decltype(UTIL_Remove) >();
 	if (!UTIL_Remove)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_Remove", g_PLAPI->GetLogTag());
-		return false;
 	}
 	UTIL_DispatchSpawn = libserver.FindPattern(g_kvSigs->GetString("UTIL_DispatchSpawn")).RCast< decltype(UTIL_DispatchSpawn) >();
 	if (!UTIL_DispatchSpawn)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_DispatchSpawn", g_PLAPI->GetLogTag());
-		return false;
 	}
 	UTIL_CreateEntity = libserver.FindPattern(g_kvSigs->GetString("UTIL_CreateEntity")).RCast< decltype(UTIL_CreateEntity) >();
 	if (!UTIL_CreateEntity)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_CreateEntity", g_PLAPI->GetLogTag());
-		return false;
 	}
 
 	auto gameEventManagerFn = libserver.FindPattern(g_kvSigs->GetString("GetGameEventManager"));
 	if( !gameEventManagerFn ) {
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetGameEventManager", g_PLAPI->GetLogTag());
-		return false;
 	}
-	gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
-	SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
+	else
+	{
+		gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
+		SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
+	}
 
 	new CTimer(1.0f, []()
 	{
@@ -763,7 +764,6 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 	g_bHasTicked = false;
 	g_pGameRules = nullptr;
 	g_pEntitySystem = GameEntitySystem();
-
 	gpGlobals = engine->GetServerGlobals();
 	g_pUtilsApi->SendHookStartup();
 }
@@ -1169,7 +1169,7 @@ void UtilsApi::PrintToCenterHtmlAll(int iDuration, const char *msg, ...)
 
 void UtilsApi::SetEntityModel(CBaseModelEntity* pEntity, const char* szModel)
 {
-	if(pEntity)
+	if(pEntity && UTIL_SetModel)
 	{
 		UTIL_SetModel(pEntity, szModel);
 	}
@@ -1177,7 +1177,7 @@ void UtilsApi::SetEntityModel(CBaseModelEntity* pEntity, const char* szModel)
 
 void UtilsApi::DispatchSpawn(CEntityInstance* pEntity, CEntityKeyValues* pKeyValues)
 {
-	if(pEntity)
+	if(pEntity && UTIL_DispatchSpawn)
 	{
 		UTIL_DispatchSpawn(pEntity, pKeyValues);
 	}
@@ -1185,12 +1185,12 @@ void UtilsApi::DispatchSpawn(CEntityInstance* pEntity, CEntityKeyValues* pKeyVal
 
 CBaseEntity* UtilsApi::CreateEntityByName(const char* pClassName, CEntityIndex iForceEdictIndex)
 {
-	return UTIL_CreateEntity(pClassName, iForceEdictIndex);
+	return UTIL_CreateEntity?UTIL_CreateEntity(pClassName, iForceEdictIndex):nullptr;
 }
 
 void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
 {
-	if(pEntity)
+	if(pEntity && UTIL_Remove)
 	{
 		UTIL_Remove(pEntity);
 	}
@@ -1198,7 +1198,8 @@ void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
 
 void UtilsApi::AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller)
 {
-    UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0);
+	if(UTIL_AcceptInput)
+    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0);
 }
 
 void UtilsApi::NextFrame(std::function<void()> fn)
@@ -1263,8 +1264,6 @@ void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, con
 			}
 			const auto entity = static_cast<CEntityInstance*>(CEntity);
 			entity->NetworkStateChanged(offset);
-			CEntity->m_lastNetworkChange() = gpGlobals->curtime;
-			CEntity->m_isSteadyState().ClearAll();
 		}
 		else
 		{
@@ -1362,7 +1361,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.1";
+	return "1.6.3";
 }
 
 const char* Menus::GetDate()

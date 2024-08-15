@@ -273,7 +273,7 @@ public:
 	uint64 GetUnauthenticatedSteamId64() { return m_UnauthenticatedSteamID->ConvertToUint64(); }
 	const CSteamID* GetUnauthenticatedSteamId() { return m_UnauthenticatedSteamID; }
 
-	uint64 GetSteamId64() { return m_SteamID->ConvertToUint64(); }
+	uint64 GetSteamId64() { return m_SteamID?m_SteamID->ConvertToUint64():0; }
 	const CSteamID* GetSteamId() { return m_SteamID; }
 
 	void SetAuthenticated(bool bAuthenticated) { m_bAuthenticated = bAuthenticated; }
