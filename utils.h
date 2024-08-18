@@ -63,6 +63,7 @@ private: // Hooks
 	void Hook_OnClientConnected( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress, bool bFakePlayer );
 	bool Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason );
 	void Hook_ClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid );
+	bool Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer);
 };
 
 class MenusApi : public IMenusApi {
@@ -240,6 +241,23 @@ public:
 			m_nextFrame.pop_front();
 		}
 	}
+
+	void HookOnTakeDamage(SourceMM::PluginId id, OnTakeDamageCallback callback) override {
+		OnTakeDamageHook[id].push_back(callback);
+	}
+
+	bool SendHookOnTakeDamage(int iSlot, CTakeDamageInfoContainer* &pInfoContainer) {
+		bool bFound = true;
+		for(auto& item : OnTakeDamageHook)
+		{
+			for (auto& callback : item.second) {
+				if (callback && !callback(iSlot, pInfoContainer)) {
+					bFound = false;
+				}
+			}
+		}
+		return bFound;
+	}
 private:
     std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
     std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
@@ -250,6 +268,8 @@ private:
     std::map<int, std::vector<StartupCallback>> GetGameRules;
 
     std::map<int, std::map<std::string, EventCallback>> HookEvents;
+
+	std::map<int, std::vector<OnTakeDamageCallback>> OnTakeDamageHook;
 
 	std::deque<std::function<void()>> m_nextFrame;
 };
