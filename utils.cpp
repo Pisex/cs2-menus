@@ -193,11 +193,13 @@ CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdi
 void (*UTIL_Remove)(CEntityInstance*) = nullptr;
 void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
+void (*UTIL_TakeDamage)(CEntityInstance*, CTakeDamageInfo) = nullptr;
 
 using namespace DynLibUtils;
 
 funchook_t* m_SayHook;
 funchook_t* m_SayTeamHook;
+funchook_t* m_TakeDamageHook;
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -241,6 +243,28 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 	{
 		UTIL_Say(ctx, args);
 	}
+}
+
+void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo info)
+{
+	if (pEntity)
+	{
+		CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
+		if (pPawn)
+		{
+			auto pController = pPawn->m_hController();
+			if (pController)
+			{
+				int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
+				if (iPlayerSlot >= 0 && iPlayerSlot < 64)
+				{
+					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
+						return;
+				}
+			}
+		}
+	}
+	UTIL_TakeDamage(pEntity, info);
 }
 
 std::string Colorizer(std::string str)
@@ -436,6 +460,18 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		funchook_install(m_SayHook, 0);
 	}
 
+	UTIL_TakeDamage = libserver.FindPattern(g_kvSigs->GetString("OnTakeDamagePre")).RCast< decltype(UTIL_TakeDamage) >();
+	if (!UTIL_TakeDamage)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TakeDamage", g_PLAPI->GetLogTag());
+	}
+	else
+	{
+		m_TakeDamageHook = funchook_create();
+		funchook_prepare(m_TakeDamageHook, (void**)&UTIL_TakeDamage, (void*)Hook_TakeDamage);
+		funchook_install(m_TakeDamageHook, 0);
+	}
+
 	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
 	if (!UTIL_SetModel)
 	{
@@ -473,8 +509,11 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find CCSPlayerPawn vtable", g_PLAPI->GetLogTag());
 	}
-	SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
-	g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
+	else
+	{
+		SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
+		g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
+	}
 
 	auto gameEventManagerFn = libserver.FindPattern(g_kvSigs->GetString("GetGameEventManager"));
 	if( !gameEventManagerFn ) {
@@ -549,7 +588,6 @@ bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
 	CBasePlayerController* pPlayerController = pPawn->m_hController();
     if (!pPlayerController || !pPlayerController->m_hPawn())
         RETURN_META_VALUE(MRES_IGNORED, true);
-
     int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
 	RETURN_META_VALUE(MRES_IGNORED, g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer));
 }
@@ -567,9 +605,10 @@ bool Menus::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
 
-	SH_REMOVE_HOOK_ID(g_iOnTakeDamageAliveId);
-	funchook_destroy(m_SayHook);
-	funchook_destroy(m_SayTeamHook);
+	if(g_iOnTakeDamageAliveId) SH_REMOVE_HOOK_ID(g_iOnTakeDamageAliveId);
+	if(m_SayHook) funchook_destroy(m_SayHook);
+	if(m_SayTeamHook) funchook_destroy(m_SayTeamHook);
+	if(m_TakeDamageHook) funchook_destroy(m_TakeDamageHook);
 
 	ConVar_Unregister();
 	
@@ -938,6 +977,7 @@ std::string MenusApi::escapeString(const std::string& input) {
             case '\t': escaped += "\\t"; break;
             case '<': escaped += "&lt;"; break;
             case '>': escaped += "&gt;"; break;
+			case '%': escaped += "%%"; break;
             default: escaped += c; break;
         }
     }
@@ -1394,7 +1434,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.4";
+	return "1.6.5";
 }
 
 const char* Menus::GetDate()

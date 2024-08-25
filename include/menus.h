@@ -38,6 +38,7 @@ typedef std::function<bool(int iSlot, const char* szContent, bool bMute)> Comman
 typedef std::function<void(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)> EventCallback;
 typedef std::function<void()> StartupCallback;
 typedef std::function<bool(int iSlot, CTakeDamageInfoContainer *&pInfoContainer)> OnTakeDamageCallback;
+typedef std::function<bool(int iSlot, CTakeDamageInfo &pInfo)> OnTakeDamagePreCallback;
 
 class IUtilsApi
 {
@@ -85,6 +86,7 @@ public:
     virtual CTimer* CreateTimer(float flInterval, std::function<float()> func) = 0;
     virtual void RemoveTimer(CTimer* timer) = 0;
     virtual void HookOnTakeDamage(SourceMM::PluginId id, OnTakeDamageCallback callback) = 0;
+    virtual void HookOnTakeDamagePre(SourceMM::PluginId id, OnTakeDamagePreCallback callback) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

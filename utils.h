@@ -232,6 +232,8 @@ public:
 		ChatHookPost[id].clear();
 		StartupHook[id].clear();
 		GetGameRules[id].clear();
+		OnTakeDamageHookPre[id].clear();
+		OnTakeDamageHook[id].clear();
 	}
 	
 	void NextFrame() {
@@ -246,12 +248,28 @@ public:
 		OnTakeDamageHook[id].push_back(callback);
 	}
 
+	void HookOnTakeDamagePre(SourceMM::PluginId id, OnTakeDamagePreCallback callback) override {
+		OnTakeDamageHookPre[id].push_back(callback);
+	}
+
 	bool SendHookOnTakeDamage(int iSlot, CTakeDamageInfoContainer* &pInfoContainer) {
 		bool bFound = true;
 		for(auto& item : OnTakeDamageHook)
 		{
 			for (auto& callback : item.second) {
 				if (callback && !callback(iSlot, pInfoContainer)) {
+					bFound = false;
+				}
+			}
+		}
+		return bFound;
+	}
+	bool SendHookOnTakeDamagePre(int iSlot, CTakeDamageInfo& pInfo) {
+		bool bFound = true;
+		for(auto& item : OnTakeDamageHookPre)
+		{
+			for (auto& callback : item.second) {
+				if (callback && !callback(iSlot, pInfo)) {
 					bFound = false;
 				}
 			}
@@ -270,6 +288,7 @@ private:
     std::map<int, std::map<std::string, EventCallback>> HookEvents;
 
 	std::map<int, std::vector<OnTakeDamageCallback>> OnTakeDamageHook;
+	std::map<int, std::vector<OnTakeDamagePreCallback>> OnTakeDamageHookPre;
 
 	std::deque<std::function<void()>> m_nextFrame;
 };
