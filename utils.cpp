@@ -585,11 +585,14 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
 {
 	CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
+	if(!pPawn) RETURN_META_VALUE(MRES_IGNORED, true);
 	CBasePlayerController* pPlayerController = pPawn->m_hController();
-    if (!pPlayerController || !pPlayerController->m_hPawn())
-        RETURN_META_VALUE(MRES_IGNORED, true);
-    int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
-	RETURN_META_VALUE(MRES_IGNORED, g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer));
+    if (pPlayerController)
+	{
+    	int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
+		g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer);
+	}
+	RETURN_META_VALUE(MRES_IGNORED, true);
 }
 
 bool Menus::Unload(char *error, size_t maxlen)
