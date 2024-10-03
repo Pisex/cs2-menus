@@ -247,24 +247,24 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 
 void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo info)
 {
-	// if (pEntity)
-	// {
-	// 	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
-	// 	if (pPawn)
-	// 	{
-	// 		auto pController = pPawn->m_hController();
-	// 		if (pController)
-	// 		{
-	// 			int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
-	// 			if (iPlayerSlot >= 0 && iPlayerSlot < 64)
-	// 			{
-	// 				if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
-	// 					return;
-	// 			}
-	// 		}
-	// 	}
-	// }
-	// UTIL_TakeDamage(pEntity, info);
+	if (pEntity)
+	{
+		CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
+		if (pPawn)
+		{
+			auto pController = pPawn->m_hController();
+			if (pController)
+			{
+				int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
+				if (iPlayerSlot >= 0 && iPlayerSlot < 64)
+				{
+					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
+						return;
+				}
+			}
+		}
+	}
+	UTIL_TakeDamage(pEntity, info);
 }
 
 std::string Colorizer(std::string str)
@@ -460,17 +460,17 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		funchook_install(m_SayHook, 0);
 	}
 
-	// UTIL_TakeDamage = libserver.FindPattern(g_kvSigs->GetString("OnTakeDamagePre")).RCast< decltype(UTIL_TakeDamage) >();
-	// if (!UTIL_TakeDamage)
-	// {
-	// 	g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TakeDamage", g_PLAPI->GetLogTag());
-	// }
-	// else
-	// {
-	// 	m_TakeDamageHook = funchook_create();
-	// 	funchook_prepare(m_TakeDamageHook, (void**)&UTIL_TakeDamage, (void*)Hook_TakeDamage);
-	// 	funchook_install(m_TakeDamageHook, 0);
-	// }
+	UTIL_TakeDamage = libserver.FindPattern(g_kvSigs->GetString("OnTakeDamagePre")).RCast< decltype(UTIL_TakeDamage) >();
+	if (!UTIL_TakeDamage)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TakeDamage", g_PLAPI->GetLogTag());
+	}
+	else
+	{
+		m_TakeDamageHook = funchook_create();
+		funchook_prepare(m_TakeDamageHook, (void**)&UTIL_TakeDamage, (void*)Hook_TakeDamage);
+		funchook_install(m_TakeDamageHook, 0);
+	}
 
 	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
 	if (!UTIL_SetModel)
@@ -1437,7 +1437,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.5.fix";
+	return "1.6.6";
 }
 
 const char* Menus::GetDate()
