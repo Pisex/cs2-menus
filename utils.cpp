@@ -247,24 +247,24 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 
 void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo info)
 {
-	if (pEntity)
-	{
-		CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
-		if (pPawn)
-		{
-			auto pController = pPawn->m_hController();
-			if (pController)
-			{
-				int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
-				if (iPlayerSlot >= 0 && iPlayerSlot < 64)
-				{
-					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
-						return;
-				}
-			}
-		}
-	}
-	UTIL_TakeDamage(pEntity, info);
+	// if (pEntity)
+	// {
+	// 	CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
+	// 	if (pPawn)
+	// 	{
+	// 		auto pController = pPawn->m_hController();
+	// 		if (pController)
+	// 		{
+	// 			int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
+	// 			if (iPlayerSlot >= 0 && iPlayerSlot < 64)
+	// 			{
+	// 				if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
+	// 					return;
+	// 			}
+	// 		}
+	// 	}
+	// }
+	// UTIL_TakeDamage(pEntity, info);
 }
 
 std::string Colorizer(std::string str)
@@ -460,17 +460,17 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		funchook_install(m_SayHook, 0);
 	}
 
-	UTIL_TakeDamage = libserver.FindPattern(g_kvSigs->GetString("OnTakeDamagePre")).RCast< decltype(UTIL_TakeDamage) >();
-	if (!UTIL_TakeDamage)
-	{
-		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TakeDamage", g_PLAPI->GetLogTag());
-	}
-	else
-	{
-		m_TakeDamageHook = funchook_create();
-		funchook_prepare(m_TakeDamageHook, (void**)&UTIL_TakeDamage, (void*)Hook_TakeDamage);
-		funchook_install(m_TakeDamageHook, 0);
-	}
+	// UTIL_TakeDamage = libserver.FindPattern(g_kvSigs->GetString("OnTakeDamagePre")).RCast< decltype(UTIL_TakeDamage) >();
+	// if (!UTIL_TakeDamage)
+	// {
+	// 	g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TakeDamage", g_PLAPI->GetLogTag());
+	// }
+	// else
+	// {
+	// 	m_TakeDamageHook = funchook_create();
+	// 	funchook_prepare(m_TakeDamageHook, (void**)&UTIL_TakeDamage, (void*)Hook_TakeDamage);
+	// 	funchook_install(m_TakeDamageHook, 0);
+	// }
 
 	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
 	if (!UTIL_SetModel)
@@ -504,16 +504,16 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetLegacyGameEventListener", g_PLAPI->GetLogTag());
 	}
 
-	void* pCCSPlayerPawnVTable = libserver.GetVirtualTableByName("CCSPlayerPawn");
-	if (!pCCSPlayerPawnVTable)
-	{
-		g_pUtilsApi->ErrorLog("[%s] Failed to find CCSPlayerPawn vtable", g_PLAPI->GetLogTag());
-	}
-	else
-	{
-		SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
-		g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
-	}
+	// void* pCCSPlayerPawnVTable = libserver.GetVirtualTableByName("CCSPlayerPawn");
+	// if (!pCCSPlayerPawnVTable)
+	// {
+	// 	g_pUtilsApi->ErrorLog("[%s] Failed to find CCSPlayerPawn vtable", g_PLAPI->GetLogTag());
+	// }
+	// else
+	// {
+	// 	SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
+	// 	g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
+	// }
 
 	auto gameEventManagerFn = libserver.FindPattern(g_kvSigs->GetString("GetGameEventManager"));
 	if( !gameEventManagerFn ) {
@@ -584,14 +584,14 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
 {
-	CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
-	if(!pPawn) RETURN_META_VALUE(MRES_IGNORED, true);
-	CBasePlayerController* pPlayerController = pPawn->m_hController();
-    if (pPlayerController)
-	{
-    	int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
-		g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer);
-	}
+	// CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
+	// if(!pPawn) RETURN_META_VALUE(MRES_IGNORED, true);
+	// CBasePlayerController* pPlayerController = pPawn->m_hController();
+    // if (pPlayerController)
+	// {
+    // 	int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
+	// 	g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer);
+	// }
 	RETURN_META_VALUE(MRES_IGNORED, true);
 }
 
@@ -1437,7 +1437,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.5";
+	return "1.6.5.fix";
 }
 
 const char* Menus::GetDate()
