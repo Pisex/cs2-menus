@@ -223,7 +223,8 @@ public:
 	CBaseEntity* CreateEntityByName(const char *pClassName, CEntityIndex iForceEdictIndex);
 	void RemoveEntity(CEntityInstance* pEntity);
 	void AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller);
-
+	void CollisionRulesChanged(CBaseEntity* pEnt);
+	
 	void ClearAllHooks(SourceMM::PluginId id) override {
 		ConsoleCommands[id].clear();
 		ChatCommands[id].clear();
@@ -264,7 +265,7 @@ public:
 		}
 		return bFound;
 	}
-	bool SendHookOnTakeDamagePre(int iSlot, CTakeDamageInfo& pInfo) {
+	bool SendHookOnTakeDamagePre(int iSlot, CTakeDamageInfo &pInfo) {
 		bool bFound = true;
 		for(auto& item : OnTakeDamageHookPre)
 		{
@@ -418,6 +419,12 @@ public:
 			}
 		}
 	}
+	
+	void CommitSuicide(int iSlot, bool bExplode, bool bForce);
+	void ChangeTeam(int iSlot, int iNewTeam);
+	void Teleport(int iSlot, const Vector *position, const QAngle *angles, const Vector *velocity);
+	void Respawn(int iSlot);
+	void DropWeapon(int iSlot, CBaseEntity* pWeapon, Vector* pVecTarget, Vector* pVelocity);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };

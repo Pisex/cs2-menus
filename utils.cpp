@@ -23,6 +23,12 @@ float g_flUniversalTime;
 float g_flLastTickedTime;
 bool g_bHasTicked;
 
+int g_iCommitSuicide = 0;
+int g_iChangeTeam = 0;
+int g_iCollisionRulesChanged = 0;
+int g_iTeleport = 0;
+int g_iRespawn = 0;
+int g_iDropWeapon = 0;
 
 class CRecipientFilter : public IRecipientFilter
 {
@@ -193,7 +199,7 @@ CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdi
 void (*UTIL_Remove)(CEntityInstance*) = nullptr;
 void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
-void (*UTIL_TakeDamage)(CEntityInstance*, CTakeDamageInfo) = nullptr;
+void (*UTIL_TakeDamage)(CEntityInstance*, CTakeDamageInfo*) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -245,7 +251,7 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 	}
 }
 
-void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo info)
+void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo* info)
 {
 	if (pEntity)
 	{
@@ -258,7 +264,7 @@ void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo info)
 				int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
 				if (iPlayerSlot >= 0 && iPlayerSlot < 64)
 				{
-					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
+					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, *info))
 						return;
 				}
 			}
@@ -503,17 +509,22 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetLegacyGameEventListener", g_PLAPI->GetLogTag());
 	}
-
-	// void* pCCSPlayerPawnVTable = libserver.GetVirtualTableByName("CCSPlayerPawn");
-	// if (!pCCSPlayerPawnVTable)
-	// {
-	// 	g_pUtilsApi->ErrorLog("[%s] Failed to find CCSPlayerPawn vtable", g_PLAPI->GetLogTag());
-	// }
-	// else
-	// {
-	// 	SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
-	// 	g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
-	// }
+	g_iCommitSuicide = g_kvSigs->GetInt("CommitSuicide", 0);
+	g_iChangeTeam = g_kvSigs->GetInt("ChangeTeam", 0);
+	g_iCollisionRulesChanged = g_kvSigs->GetInt("CollisionRulesChanged", 0);
+	g_iTeleport = g_kvSigs->GetInt("Teleport", 0);
+	g_iRespawn = g_kvSigs->GetInt("Respawn", 0);
+	g_iDropWeapon = g_kvSigs->GetInt("DropWeapon", 0);
+	void* pCCSPlayerPawnVTable = libserver.GetVirtualTableByName("CCSPlayerPawn");
+	if (!pCCSPlayerPawnVTable)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find CCSPlayerPawn vtable", g_PLAPI->GetLogTag());
+	}
+	else
+	{
+		SH_MANUALHOOK_RECONFIGURE(OnTakeDamage_Alive, g_kvSigs->GetInt("OnTakeDamage_Alive"), 0, 0);
+		g_iOnTakeDamageAliveId = SH_ADD_MANUALDVPHOOK(OnTakeDamage_Alive, pCCSPlayerPawnVTable, SH_MEMBER(this, &Menus::Hook_OnTakeDamage_Alive), false);
+	}
 
 	auto gameEventManagerFn = libserver.FindPattern(g_kvSigs->GetString("GetGameEventManager"));
 	if( !gameEventManagerFn ) {
@@ -584,14 +595,14 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
 {
-	// CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
-	// if(!pPawn) RETURN_META_VALUE(MRES_IGNORED, true);
-	// CBasePlayerController* pPlayerController = pPawn->m_hController();
-    // if (pPlayerController)
-	// {
-    // 	int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
-	// 	g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer);
-	// }
+	CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
+	if(!pPawn) RETURN_META_VALUE(MRES_IGNORED, true);
+	CBasePlayerController* pPlayerController = pPawn->m_hController();
+    if (pPlayerController)
+	{
+    	int iPlayerSlot = pPlayerController->GetEntityIndex().Get() - 1;
+		g_pUtilsApi->SendHookOnTakeDamage(iPlayerSlot, pInfoContainer);
+	}
 	RETURN_META_VALUE(MRES_IGNORED, true);
 }
 
@@ -1429,6 +1440,58 @@ void UtilsApi::RemoveTimer(CTimer* pTimer)
 	}
 }
 
+void PlayersApi::CommitSuicide(int iSlot, bool bExplode, bool bForce)
+{
+	if(!g_iCommitSuicide) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CBasePlayerPawn* pPawn = pController->GetPlayerPawn();
+	if(!pPawn) return;
+	CALL_VIRTUAL(void, g_iCommitSuicide, pPawn, bExplode, bForce);
+}
+
+void PlayersApi::ChangeTeam(int iSlot, int iNewTeam)
+{
+	if(!g_iChangeTeam) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CALL_VIRTUAL(void, g_iChangeTeam, pController, iNewTeam);
+}
+
+void PlayersApi::Teleport(int iSlot, const Vector *position, const QAngle *angles, const Vector *velocity)
+{
+	if(!g_iTeleport) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CALL_VIRTUAL(void, g_iTeleport, pController, position, angles, velocity);
+}
+
+void UtilsApi::CollisionRulesChanged(CBaseEntity* pEnt)
+{
+	if(!g_iCollisionRulesChanged) return;
+	CALL_VIRTUAL(void, g_iCollisionRulesChanged, pEnt);
+}
+
+void PlayersApi::Respawn(int iSlot)
+{
+	if(!g_iRespawn) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CALL_VIRTUAL(void, g_iRespawn, pController);
+}
+
+void PlayersApi::DropWeapon(int iSlot, CBaseEntity* pWeapon, Vector* pVecTarget, Vector* pVelocity)
+{
+	if(!g_iDropWeapon) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if(!pPawn) return;
+	CCSPlayer_WeaponServices* m_pWeaponServices = pPawn->m_pWeaponServices();
+	if(!m_pWeaponServices) return;
+	CALL_VIRTUAL(void, g_iDropWeapon, m_pWeaponServices, (CBasePlayerWeapon*)pWeapon, pVecTarget, pVelocity);
+}
+
 ///////////////////////////////////////
 const char* Menus::GetLicense()
 {
@@ -1437,7 +1500,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.6";
+	return "1.6.7";
 }
 
 const char* Menus::GetDate()

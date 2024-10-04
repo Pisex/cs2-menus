@@ -22,6 +22,12 @@ public:
     virtual const CSteamID* GetSteamID(int iSlot) = 0;
 
     virtual void HookOnClientAuthorized(SourceMM::PluginId id, OnClientAuthorizedCallback callback) = 0;
+
+    virtual void CommitSuicide(int iSlot, bool bExplode, bool bForce) = 0;
+    virtual void ChangeTeam(int iSlot, int iNewTeam) = 0;
+    virtual void Teleport(int iSlot, const Vector *position, const QAngle *angles, const Vector *velocity) = 0;
+    virtual void Respawn(int iSlot) = 0;
+    virtual void DropWeapon(int iSlot, CBaseEntity* pWeapon, Vector* pVecTarget = nullptr, Vector* pVelocity = nullptr) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -87,6 +93,7 @@ public:
     virtual void RemoveTimer(CTimer* timer) = 0;
     virtual void HookOnTakeDamage(SourceMM::PluginId id, OnTakeDamageCallback callback) = 0;
     virtual void HookOnTakeDamagePre(SourceMM::PluginId id, OnTakeDamagePreCallback callback) = 0;
+    virtual void CollisionRulesChanged(CBaseEntity* pEnt) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
