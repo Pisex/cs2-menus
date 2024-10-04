@@ -1466,6 +1466,12 @@ void PlayersApi::Teleport(int iSlot, const Vector *position, const QAngle *angle
 	CALL_VIRTUAL(void, g_iTeleport, pController, position, angles, velocity);
 }
 
+void UtilsApi::TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity)
+{
+	if(!g_iTeleport) return;
+	CALL_VIRTUAL(void, g_iTeleport, pEnt, position, angles, velocity);
+}
+
 void UtilsApi::CollisionRulesChanged(CBaseEntity* pEnt)
 {
 	if(!g_iCollisionRulesChanged) return;

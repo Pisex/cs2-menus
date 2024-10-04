@@ -94,6 +94,7 @@ public:
     virtual void HookOnTakeDamage(SourceMM::PluginId id, OnTakeDamageCallback callback) = 0;
     virtual void HookOnTakeDamagePre(SourceMM::PluginId id, OnTakeDamagePreCallback callback) = 0;
     virtual void CollisionRulesChanged(CBaseEntity* pEnt) = 0;
+    virtual void TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

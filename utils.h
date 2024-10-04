@@ -224,6 +224,7 @@ public:
 	void RemoveEntity(CEntityInstance* pEntity);
 	void AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller);
 	void CollisionRulesChanged(CBaseEntity* pEnt);
+	void TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity);
 	
 	void ClearAllHooks(SourceMM::PluginId id) override {
 		ConsoleCommands[id].clear();
