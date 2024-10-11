@@ -76,17 +76,13 @@ public:
 	void AddAllPlayers()
 	{
 		m_Recipients.RemoveAll();
-		if (!GameEntitySystem())
+
+		for (int i = 0; i < 64; i++)
 		{
-			return;
-		}
-		for (int i = 0; i <= gpGlobals->maxClients; i++)
-		{
-			CBaseEntity *ent = static_cast<CBaseEntity *>(GameEntitySystem()->GetEntityInstance(CEntityIndex(i)));
-			if (ent)
-			{
-				AddRecipient(i);
-			}
+			CCSPlayerController* pPlayer = CCSPlayerController::FromSlot(i);
+			if (!pPlayer) continue;
+
+			AddRecipient(i);
 		}
 	}
 
@@ -100,15 +96,6 @@ private:
 	NetChannelBufType_t m_nBufType;
 	bool m_bInitMessage;
 	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
-};
-
-class CBroadcastRecipientFilter : public CRecipientFilter
-{
-public:
-	CBroadcastRecipientFilter(void)
-	{
-		AddAllPlayers();
-	}
 };
 
 class CSingleRecipientFilter : public IRecipientFilter
@@ -1042,9 +1029,9 @@ void UtilsApi::PrintToChatAll(const char *msg, ...)
 
 	std::string colorizedBuf = Colorizer(buf);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
-
+	CRecipientFilter filter;
+	filter.AddAllPlayers();
+	ClientPrintFilter(&filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
 }
 
 void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
@@ -1096,8 +1083,9 @@ void UtilsApi::PrintToConsoleAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	CRecipientFilter filter;
+	filter.AddAllPlayers();
+	ClientPrintFilter(&filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
@@ -1129,8 +1117,9 @@ void UtilsApi::PrintToCenterAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	CRecipientFilter filter;
+	filter.AddAllPlayers();
+	ClientPrintFilter(&filter, HUD_PRINTCENTER, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
@@ -1162,8 +1151,9 @@ void UtilsApi::PrintToAlertAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CBroadcastRecipientFilter *filter = new CBroadcastRecipientFilter;
-	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	CRecipientFilter filter;
+	filter.AddAllPlayers();
+	ClientPrintFilter(&filter, HUD_PRINTALERT, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
@@ -1506,7 +1496,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.7";
+	return "1.6.8";
 }
 
 const char* Menus::GetDate()
