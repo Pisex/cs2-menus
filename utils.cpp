@@ -30,110 +30,6 @@ int g_iTeleport = 0;
 int g_iRespawn = 0;
 int g_iDropWeapon = 0;
 
-class CRecipientFilter : public IRecipientFilter
-{
-public:
-	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
-
-	~CRecipientFilter() override {}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
-
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
-
-	int GetRecipientCount(void) const override
-	{
-		return m_Recipients.Count();
-	}
-
-	CPlayerSlot GetRecipientIndex(int slot) const override
-	{
-		if (slot < 0 || slot >= GetRecipientCount())
-		{
-			return CPlayerSlot(-1);
-		}
-
-		return m_Recipients[slot];
-	}
-
-	void AddRecipient(CPlayerSlot slot)
-	{
-		// Don't add if it already exists
-		if (m_Recipients.Find(slot) != m_Recipients.InvalidIndex())
-		{
-			return;
-		}
-
-		m_Recipients.AddToTail(slot);
-	}
-
-	void AddAllPlayers()
-	{
-		m_Recipients.RemoveAll();
-
-		for (int i = 0; i < 64; i++)
-		{
-			CCSPlayerController* pPlayer = CCSPlayerController::FromSlot(i);
-			if (!pPlayer) continue;
-
-			AddRecipient(i);
-		}
-	}
-
-private:
-	// Can't copy this unless we explicitly do it!
-	CRecipientFilter(CRecipientFilter const &source)
-	{
-		Assert(0);
-	}
-
-	NetChannelBufType_t m_nBufType;
-	bool m_bInitMessage;
-	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
-};
-
-class CSingleRecipientFilter : public IRecipientFilter
-{
-public:
-	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
-		: m_nBufType(nBufType), m_bInitMessage(bInitMessage), m_iRecipient(iRecipient)
-	{
-	}
-
-	~CSingleRecipientFilter() override {}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
-
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
-
-	int GetRecipientCount(void) const override
-	{
-		return 1;
-	}
-
-	CPlayerSlot GetRecipientIndex(int slot) const override
-	{
-		return CPlayerSlot(m_iRecipient);
-	}
-
-private:
-	NetChannelBufType_t m_nBufType;
-	bool m_bInitMessage;
-	int m_iRecipient;
-};
-
 CGameEntitySystem* GameEntitySystem()
 {
 	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceServiceServer) + WIN_LINUX(0x58, 0x50));
@@ -187,12 +83,16 @@ void (*UTIL_Remove)(CEntityInstance*) = nullptr;
 void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
 void (*UTIL_TakeDamage)(CEntityInstance*, CTakeDamageInfo*) = nullptr;
+bool (*UTIL_IsHearingClient)(void* serverClient, int index) = nullptr;
+void (*UTIL_SwitchTeam)(CCSPlayerController* pPlayer, int iTeam) = nullptr;
+void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
 
 using namespace DynLibUtils;
 
 funchook_t* m_SayHook;
 funchook_t* m_SayTeamHook;
 funchook_t* m_TakeDamageHook;
+funchook_t* m_IsHearingClientHook;
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -201,7 +101,7 @@ bool containsOnlyDigits(const std::string& str) {
 void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 {
 	bool bCallback = true;
-	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), true);
 	if(args[1][0])
 	{
 		if(g_pEntitySystem)
@@ -211,7 +111,7 @@ void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 				bCallback = false;
 		}
 	}
-	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback);
+	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback, true);
 	if(bCallback)
 	{
 		UTIL_SayTeam(ctx, args);
@@ -221,7 +121,7 @@ void SayTeamHook(const CCommandContext& ctx, CCommand& args)
 void SayHook(const CCommandContext& ctx, CCommand& args)
 {
 	bool bCallback = true;
-	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS());
+	bCallback = g_pUtilsApi->SendChatListenerPreCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), false);
 	if(args[1][0])
 	{
 		if(g_pEntitySystem)
@@ -231,7 +131,7 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 				bCallback = false;
 		}
 	}
-	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback);
+	bCallback = g_pUtilsApi->SendChatListenerPostCallback(ctx.GetPlayerSlot().Get(), args.ArgS(), bCallback, false);
 	if(bCallback)
 	{
 		UTIL_Say(ctx, args);
@@ -356,6 +256,11 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 	return 0;
 }
 
+bool FASTCALL IsHearingClient(void* serverClient, int index)
+{
+	return g_pUtilsApi->SendHookOnHearingClient(index)?UTIL_IsHearingClient(serverClient, index):false;
+}
+
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
@@ -465,6 +370,19 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		funchook_install(m_TakeDamageHook, 0);
 	}
 
+	CModule libengine(engine);
+	UTIL_IsHearingClient = libengine.FindPattern(g_kvSigs->GetString("IsHearingClient")).RCast< decltype(UTIL_IsHearingClient) >();
+	if (!UTIL_IsHearingClient)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get IsHearingClient", g_PLAPI->GetLogTag());
+	}
+	else
+	{
+		m_IsHearingClientHook = funchook_create();
+		funchook_prepare(m_IsHearingClientHook, (void**)&UTIL_IsHearingClient, (void*)IsHearingClient);
+		funchook_install(m_IsHearingClientHook, 0);
+	}
+
 	UTIL_SetModel = libserver.FindPattern(g_kvSigs->GetString("CBaseModelEntity_SetModel")).RCast< decltype(UTIL_SetModel) >();
 	if (!UTIL_SetModel)
 	{
@@ -495,6 +413,16 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	if (!UTIL_GetLegacyGameEventListener)
 	{
 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetLegacyGameEventListener", g_PLAPI->GetLogTag());
+	}
+	UTIL_SwitchTeam = libserver.FindPattern(g_kvSigs->GetString("SwitchTeam")).RCast< decltype(UTIL_SwitchTeam) >();
+	if (!UTIL_SwitchTeam)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get SwitchTeam", g_PLAPI->GetLogTag());
+	}
+	UTIL_SetMoveType = libserver.FindPattern(g_kvSigs->GetString("SetMoveType")).RCast< decltype(UTIL_SetMoveType) >();
+	if (!UTIL_SetMoveType)
+	{
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get SetMoveType", g_PLAPI->GetLogTag());
 	}
 	g_iCommitSuicide = g_kvSigs->GetInt("CommitSuicide", 0);
 	g_iChangeTeam = g_kvSigs->GetInt("ChangeTeam", 0);
@@ -1488,6 +1416,39 @@ void PlayersApi::DropWeapon(int iSlot, CBaseEntity* pWeapon, Vector* pVecTarget,
 	CALL_VIRTUAL(void, g_iDropWeapon, m_pWeaponServices, (CBasePlayerWeapon*)pWeapon, pVecTarget, pVelocity);
 }
 
+void PlayersApi::SwitchTeam(int iSlot, int iNewTeam)
+{
+	if(!UTIL_SwitchTeam) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	UTIL_SwitchTeam(pController, iNewTeam);
+}
+
+const char* PlayersApi::GetPlayerName(int iSlot)
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return "";
+	return pController->m_iszPlayerName();
+}
+
+void PlayersApi::SetPlayerName(int iSlot, const char* szName)
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	g_SMAPI->Format(pController->m_iszPlayerName(), 128, "%s", szName);
+	g_pUtilsApi->SetStateChanged(pController, "CBasePlayerController", "m_iszPlayerName");
+}
+
+void PlayersApi::SetMoveType(int iSlot, MoveType_t moveType)
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if(!pPawn) return;
+	if(!UTIL_SetMoveType) pPawn->SetMoveType(moveType);
+	else UTIL_SetMoveType(pPawn, moveType, pPawn->m_MoveCollide());
+}
+
 ///////////////////////////////////////
 const char* Menus::GetLicense()
 {
@@ -1496,7 +1457,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.6.8";
+	return "1.6.9";
 }
 
 const char* Menus::GetDate()
