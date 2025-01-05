@@ -1,0 +1,6 @@
+RU:
+При использовании site - визуальное отображение будет зависеть только от скорости интернета клиента
+При использовании workshop - визуально идеальный вариант независящий от интернета пользователя
+EN:
+When using site - visual display will depend only on the client's internet speed
+When using workshop - the visual ideal is independent of the user's internet speed

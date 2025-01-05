@@ -63,13 +63,13 @@
 	}
 	"HtmlEButtons_Web"
 	{
-		"ru"		"<img src='https://%s/e.png' width='52' height='35' />"
-		"en"		"<img src='https://%s/e.png' width='52' height='35' />"
+		"ru"		"<img src='https://%s/e.svg' width='52' height='35' />"
+		"en"		"<img src='https://%s/e.svg' width='52' height='35' />"
 	}
 	"HtmlE_PButtons_Web"
 	{
-		"ru"		"<img src='https://%s/e-p.png' width='52' height='35' />"
-		"en"		"<img src='https://%s/e-p.png' width='52' height='35' />"
+		"ru"		"<img src='https://%s/e-p.svg' width='52' height='35' />"
+		"en"		"<img src='https://%s/e-p.svg' width='52' height='35' />"
 	}
 	"HtmlWButtons_Web"
 	{
@@ -78,53 +78,53 @@
 	}
 	"HtmlW_PButtons_Web"
 	{
-		"ru"		"<img src='https://%s/w-p.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/w-p.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/w-p.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/w-p.svg' width='52' height='35' /> "
 	}
 	"HtmlSButtons_Web"
 	{
-		"ru"		"<img src='https://%s/s.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/s.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/s.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/s.svg' width='52' height='35' /> "
 	}
 	"HtmlS_PButtons_Web"
 	{
-		"ru"		"<img src='https://%s/s-p.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/s-p.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/s-p.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/s-p.svg' width='52' height='35' /> "
 	}
 	"HtmlAButtons_Web"
 	{
-		"ru"		"<img src='https://%s/a.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/a.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/a.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/a.svg' width='52' height='35' /> "
 	}
 	"HtmlA_PButtons_Web"
 	{
-		"ru"		"<img src='https://%s/a-p.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/a-p.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/a-p.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/a-p.svg' width='52' height='35' /> "
 	}
 	"HtmlDButtons_Web"
 	{
-		"ru"		"<img src='https://%s/d.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/d.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/d.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/d.svg' width='52' height='35' /> "
 	}
 	"HtmlD_PButtons_Web"
 	{
-		"ru"		"<img src='https://%s/d-p.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/d-p.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/d-p.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/d-p.svg' width='52' height='35' /> "
 	}
 	"HtmlFButtons_Web"
 	{
-		"ru"		"<img src='https://%s/f.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/f.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/f.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/f.svg' width='52' height='35' /> "
 	}
 	"HtmlSpaceButtons_Web"
 	{
-		"ru"		"<img src='https://%s/empty.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/empty.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/empty.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/empty.svg' width='52' height='35' /> "
 	}
 	"HtmlSpaceShortButtons_Web"
 	{
-		"ru"		"<img src='https://%s/empty_half.png' width='52' height='35' /> "
-		"en"		"<img src='https://%s/empty_half.png' width='52' height='35' /> "
+		"ru"		"<img src='https://%s/empty_half.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/empty_half.svg' width='52' height='35' /> "
 	}
 
 	"HtmlEButtons"

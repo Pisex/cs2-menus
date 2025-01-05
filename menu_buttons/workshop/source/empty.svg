@@ -1,0 +1,17 @@
+<svg width="83" height="30" viewBox="0 0 83 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_7_48)">
+<path d="M59.3857 40L55.8502 36.4645L107.464 -15.1498L111 -11.6143L59.3857 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M43.3848 40L39.8492 36.4645L91.4635 -15.1498L94.999 -11.6143L43.3848 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M27.3857 40L23.8502 36.4645L75.4645 -15.1498L79 -11.6143L27.3857 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M11.3857 40L7.85021 36.4645L59.4645 -15.1498L63 -11.6143L11.3857 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M4.5 30L2 29.5L0.464469 27.8502L43.4645 -15.1498L47 -11.6143L4.5 30Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M-20.6143 40L-24.1498 36.4645L27.4645 -15.1498L31 -11.6143L-20.6143 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path d="M-36.6143 40L-40.1498 36.4645L11.4645 -15.1498L15 -11.6142L-36.6143 40Z" fill="#D9D9D9" fill-opacity="0.04"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M83 9C83 6.79086 81.2091 5 79 5L4 5C1.79086 5 -2.02901e-06 6.79086 -1.83588e-06 9L-3.49692e-07 26C-1.56563e-07 28.2091 1.79086 30 4 30L79 30C81.2091 30 83 28.2091 83 26L83 9ZM4 6C2.34315 6 0.999998 7.34315 0.999998 9L1 26C1 27.6569 2.34314 29 4 29L79 29C80.6569 29 82 27.6569 82 26L82 9C82 7.34315 80.6569 6 79 6L4 6Z" fill="#FAFAFA" fill-opacity="0.1"/>
+</g>
+<defs>
+<clipPath id="clip0_7_48">
+<rect x="83" y="30" width="83" height="25" rx="4" transform="rotate(180 83 30)" fill="white"/>
+</clipPath>
+</defs>
+</svg>

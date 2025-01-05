@@ -1,0 +1,6 @@
+RU:
+Добавить в свой аддон по пути resource/menus/
+Поменять тип в конфиге MenuAddon на 1
+EN:
+Add to your addon at the path resource/menus/
+Change the type in the MenuAddon config to 1
