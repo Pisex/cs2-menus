@@ -323,12 +323,12 @@ const char* GetClientCookie(int iSlot, const char* sCookieName)
 
 bool SetClientCookie(int iSlot, const char* sCookieName, const char* sData)
 {
-	if(g_pPlayersApi->IsFakeClient(iSlot)) return "";
+	if(g_pPlayersApi->IsFakeClient(iSlot)) return false;
 	uint64 m_steamID = g_pPlayersApi->GetSteamID64(iSlot);
-	if(m_steamID == 0) return "";
+	if(m_steamID == 0) return false;
 	char szSteamID[64];
 	g_SMAPI->Format(szSteamID, sizeof(szSteamID), "%llu", m_steamID);
-	KeyValues *hData = g_hKVData->FindKey(szSteamID, false);
+	KeyValues *hData = g_hKVData->FindKey(szSteamID, true);
 	hData->SetString(sCookieName, sData);
 	g_hKVData->SaveToFile(g_pFullFileSystem, "addons/data/menus_data.ini");
 	return true;
@@ -1362,10 +1362,7 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 
 	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-	{
-		ConMsg("%s\n", buf);
 		return;
-	}
 
 	std::string colorizedBuf = Colorizer(buf);
 
@@ -1416,10 +1413,7 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 
 	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-	{
-		ConMsg("%s\n", buf);
 		return;
-	}
 
 	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
 	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
@@ -1450,10 +1444,7 @@ void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
 
 	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-	{
-		ConMsg("%s\n", buf);
 		return;
-	}
 
 	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
 	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
@@ -1484,10 +1475,7 @@ void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
 
 	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-	{
-		ConMsg("%s\n", buf);
 		return;
-	}
 	int iEnd = std::time(0) + iDuration;
 	if(UTIL_GetLegacyGameEventListener)
 	{
@@ -1887,7 +1875,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.0";
+	return "1.7.1";
 }
 
 const char* Menus::GetDate()
