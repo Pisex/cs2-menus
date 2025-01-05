@@ -28,6 +28,7 @@
 #include "ctimer.h"
 #include "funchook.h"
 #include "include/menus.h"
+#include "include/cookies.h"
 #include <map>
 #include <ctime>
 #include <chrono>
@@ -143,6 +144,7 @@ class Menus final : public ISmmPlugin, public IMetamodListener
 public:
 	bool Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late);
 	bool Unload(char* error, size_t maxlen);
+	void AllPluginsLoaded();
 	void* OnMetamodQuery(const char* iface, int* ret);
 	bool FireEvent(IGameEvent* pEvent, bool bDontBroadcast);
 	STEAM_GAMESERVER_CALLBACK_MANUAL(Menus, OnValidateAuthTicket, ValidateAuthTicketResponse_t, m_CallbackValidateAuthTicketResponse);
@@ -181,6 +183,7 @@ class MenusApi : public IMenusApi {
         hMenu.hFunc = func;
     }
 	std::string escapeString(const std::string& input);
+	bool IsMenuOpen(int iSlot);
 };
 
 class UtilsApi : public IUtilsApi
@@ -552,6 +555,9 @@ public:
 	const char* GetPlayerName(int iSlot);
 	void SetPlayerName(int iSlot, const char* szName);
 	void SetMoveType(int iSlot, MoveType_t moveType);
+	void EmitSound(std::vector<int> vPlayers, CEntityIndex ent, std::string sound_name, int pitch, float volume);
+	void EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, int pitch, float volume);
+	void StopSoundEvent(int iSlot, const char* sound_name);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };

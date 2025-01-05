@@ -45,6 +45,153 @@
 		"ru"		"<font color='red'>[!9]</font> Выход<br/>"
 		"en"		"<font color='red'>[!9]</font> Exit<br/>"
 	}
+	
+	"HtmlButton"
+	{
+		"ru"		"%s"
+		"en"		"%s"
+	}
+	"HtmlButtonBlock"
+	{
+		"ru"		"<font class='fontSize-sm' color='gray'>%s</font>"
+		"en"		"<font class='fontSize-sm' color='gray'>%s</font>"
+	}
+	"HtmlButtonBR"
+	{
+		"ru"		"<br/>"
+		"en"		"<br/>"
+	}
+	"HtmlEButtons_Web"
+	{
+		"ru"		"<img src='https://%s/e.png' width='52' height='35' />"
+		"en"		"<img src='https://%s/e.png' width='52' height='35' />"
+	}
+	"HtmlE_PButtons_Web"
+	{
+		"ru"		"<img src='https://%s/e-p.png' width='52' height='35' />"
+		"en"		"<img src='https://%s/e-p.png' width='52' height='35' />"
+	}
+	"HtmlWButtons_Web"
+	{
+		"ru"		"<img src='https://%s/w.svg' width='52' height='35' /> "
+		"en"		"<img src='https://%s/w.svg' width='52' height='35' /> "
+	}
+	"HtmlW_PButtons_Web"
+	{
+		"ru"		"<img src='https://%s/w-p.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/w-p.png' width='52' height='35' /> "
+	}
+	"HtmlSButtons_Web"
+	{
+		"ru"		"<img src='https://%s/s.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/s.png' width='52' height='35' /> "
+	}
+	"HtmlS_PButtons_Web"
+	{
+		"ru"		"<img src='https://%s/s-p.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/s-p.png' width='52' height='35' /> "
+	}
+	"HtmlAButtons_Web"
+	{
+		"ru"		"<img src='https://%s/a.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/a.png' width='52' height='35' /> "
+	}
+	"HtmlA_PButtons_Web"
+	{
+		"ru"		"<img src='https://%s/a-p.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/a-p.png' width='52' height='35' /> "
+	}
+	"HtmlDButtons_Web"
+	{
+		"ru"		"<img src='https://%s/d.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/d.png' width='52' height='35' /> "
+	}
+	"HtmlD_PButtons_Web"
+	{
+		"ru"		"<img src='https://%s/d-p.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/d-p.png' width='52' height='35' /> "
+	}
+	"HtmlFButtons_Web"
+	{
+		"ru"		"<img src='https://%s/f.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/f.png' width='52' height='35' /> "
+	}
+	"HtmlSpaceButtons_Web"
+	{
+		"ru"		"<img src='https://%s/empty.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/empty.png' width='52' height='35' /> "
+	}
+	"HtmlSpaceShortButtons_Web"
+	{
+		"ru"		"<img src='https://%s/empty_half.png' width='52' height='35' /> "
+		"en"		"<img src='https://%s/empty_half.png' width='52' height='35' /> "
+	}
+
+	"HtmlEButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/e.vsvg' width='52' height='35' />"
+		"en"		"<img src='s2r://resource/menus/e.vsvg' width='52' height='35' />"
+	}
+	"HtmlE_PButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/e-p.vsvg' width='52' height='35' />"
+		"en"		"<img src='s2r://resource/menus/e-p.vsvg' width='52' height='35' />"
+	}
+	"HtmlWButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/w.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/w.vsvg' width='52' height='35' /> "
+	}
+	"HtmlW_PButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/w-p.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/w-p.vsvg' width='52' height='35' /> "
+	}
+	"HtmlSButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/s.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/s.vsvg' width='52' height='35' /> "
+	}
+	"HtmlS_PButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/s-p.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/s-p.vsvg' width='52' height='35' /> "
+	}
+	"HtmlAButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/a.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/a.vsvg' width='52' height='35' /> "
+	}
+	"HtmlA_PButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/a-p.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/a-p.vsvg' width='52' height='35' /> "
+	}
+	"HtmlDButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/d.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/d.vsvg' width='52' height='35' /> "
+	}
+	"HtmlD_PButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/d-p.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/d-p.vsvg' width='52' height='35' /> "
+	}
+	"HtmlFButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/f.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/f.vsvg' width='52' height='35' /> "
+	}
+	"HtmlSpaceButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/empty.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/empty.vsvg' width='52' height='35' /> "
+	}
+	"HtmlSpaceShortButtons"
+	{
+		"ru"		"<img src='s2r://resource/menus/empty_half.vsvg' width='52' height='35' /> "
+		"en"		"<img src='s2r://resource/menus/empty_half.vsvg' width='52' height='35' /> "
+	}
 
 	"AuthTicketInvalid"
 	{
@@ -54,7 +201,29 @@
 
 	"AuthFailed"
 	{
-		"ru"		"  {LIGHTRED}ПРЕДУПРЕЖДЕНИЕ: Вы будете кикнуты через %i секунд из-за неудачной аутентификации в Steam."
-		"en"		"  {LIGHTRED}WARNING: You will be kicked in %i seconds due to failed Steam authentication."
+		"ru"		" {LIGHTRED}ПРЕДУПРЕЖДЕНИЕ: Вы будете кикнуты через %i секунд из-за неудачной аутентификации в Steam."
+		"en"		" {LIGHTRED}WARNING: You will be kicked in %i seconds due to failed Steam authentication."
+	}
+
+	"MenuMenusTitle"
+	{
+		"ru"		"Выберите тип меню"
+		"en"		"Choose menu type"
+	}
+
+	"MenuMenusItem0"
+	{
+		"ru"		"Чат меню"
+		"en"		"Chat menu"
+	}
+	"MenuMenusItem1"
+	{
+		"ru"		"Чат + Центр меню"
+		"en"		"Chat + Center menu"
+	}
+	"MenuMenusItem2"
+	{
+		"ru"		"WASD меню"
+		"en"		"WASD menu"
 	}
 }
