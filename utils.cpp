@@ -400,7 +400,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	g_pPlayersCore = g_pPlayersApi;
 
 	{
-		KeyValues::AutoDelete g_kvCore("Core");
+		KeyValues* g_kvCore = new KeyValues("Core");
 		const char *pszPath = "addons/configs/core.cfg";
 
 		if (!g_kvCore->LoadFromFile(g_pFullFileSystem, pszPath))
