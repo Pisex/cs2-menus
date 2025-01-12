@@ -467,7 +467,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 			funchook_install(m_SayHook, 0);
 		}
 	}
-	const char* pszTakeDamage = g_kvSigs->GetString("UTIL_TakeDamage");
+	const char* pszTakeDamage = g_kvSigs->GetString("OnTakeDamagePre");
 	if(pszTakeDamage && pszTakeDamage[0]) {
 		UTIL_TakeDamage = libserver.FindPattern(pszTakeDamage).RCast< decltype(UTIL_TakeDamage) >();
 		if (!UTIL_TakeDamage)
@@ -1056,6 +1056,7 @@ std::string GetMenuText(int iSlot)
 				}
 			} else if(buttons & (1 << 13)) {
 				CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9);
+				return "";
 			}
 		}
 	}
@@ -1875,7 +1876,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.1";
+	return "1.7.1f";
 }
 
 const char* Menus::GetDate()
