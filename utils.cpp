@@ -1205,7 +1205,11 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 			}
 			if(g_iMenuType[iSlot] == 2) {
 				std::string szMenu = GetMenuText(iSlot);
-				g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, szMenu.c_str());
+				if(szMenu.size() > 0) g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, szMenu.c_str());
+				else {
+					hMenuPlayer.clear();
+					return -1.0f;
+				}
 			}
 			return 0.0f;
 		});
@@ -1876,7 +1880,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.1f";
+	return "1.7.2";
 }
 
 const char* Menus::GetDate()
