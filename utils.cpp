@@ -1169,9 +1169,8 @@ std::string GetMenuText(int iSlot)
 	return sBuff;
 }
 
-int RountToCeil(float f)
-{
-	return (int)f + 1;
+int RoundToCeil(float value) {
+	return static_cast<int>(ceil(value));
 }
 
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true)
@@ -1181,15 +1180,15 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 	if(!hMenuPlayer.bEnabled || !bReset)
 	{
 		g_iMenuItem[iSlot] = 1;
-		if(hMenuPlayer.iList > 0) {
-			int iLists = RountToCeil(size(hMenu.hItems) / 5);
-			while (iLists < hMenuPlayer.iList+1) {
-				hMenuPlayer.iList--;
-			}
-		}
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
 		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
+		if(hMenuPlayer.iList > 0) {
+			int iLists = RoundToCeil(size(hMenu.hItems) / 5.0);
+			while (iLists < hMenuPlayer.iList + 1) {
+				hMenuPlayer.iList--;
+			}
+		}
 		new CTimer(0.0f,[iSlot, &hMenu, &hMenuPlayer]() {
 			if(!hMenuPlayer.bEnabled) return -1.0f;
 			if(std::time(0) >= hMenuPlayer.iEnd)
@@ -1877,7 +1876,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.3";
+	return "1.7.3f";
 }
 
 const char* Menus::GetDate()
