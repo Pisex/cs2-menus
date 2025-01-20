@@ -174,7 +174,7 @@ private: // Hooks
 
 class MenusApi : public IMenusApi {
     void AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, int iType);
-    void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose);
+    void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose, bool bReset);
     void SetExitMenu(Menu& hMenu, bool bExit);
     void SetBackMenu(Menu& hMenu, bool bBack);
     void SetTitleMenu(Menu& hMenu, const char* szTitle); 

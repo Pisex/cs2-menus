@@ -42,7 +42,7 @@ KeyValues* g_hKVData;
 
 int g_iMenuType[64];
 int g_iMenuItem[64];
-int g_iMenuLastButtonInput[64];
+uint g_iMenuLastButtonInput[64];
 MenuPlayer g_MenuPlayer[64];
 std::string g_TextMenuPlayer[64];
 
@@ -299,26 +299,21 @@ void Menus::AllPluginsLoaded() {
 	}
 	g_pCookies->HookClientCookieLoaded(g_PLID, [](int iSlot) {
 		const char* szMenuType = g_pCookies->GetCookie(iSlot, "Utils.MenuType");
-		if (szMenuType && szMenuType[0])
-			g_iMenuType[iSlot] = atoi(szMenuType);
-		else {
-			g_iMenuType[iSlot] = g_iMenuTypeDefault;
-			g_pCookies->SetCookie(iSlot, "Utils.MenuType", std::to_string(g_iMenuTypeDefault).c_str());
-		}
+		if (szMenuType && szMenuType[0]) g_iMenuType[iSlot] = atoi(szMenuType);
+		else g_iMenuType[iSlot] = g_iMenuTypeDefault;
 	});
 }
 
-const char* GetClientCookie(int iSlot, const char* sCookieName)
+int GetClientCookieMenuType(int iSlot)
 {
-	if(g_pPlayersApi->IsFakeClient(iSlot)) return "";
+	if(g_pPlayersApi->IsFakeClient(iSlot)) return g_iMenuTypeDefault;
 	uint64 m_steamID = g_pPlayersApi->GetSteamID64(iSlot);
-	if(m_steamID == 0) return "";
+	if(m_steamID == 0) return g_iMenuTypeDefault;
 	char szSteamID[64];
 	g_SMAPI->Format(szSteamID, sizeof(szSteamID), "%llu", m_steamID);
 	KeyValues *hData = g_hKVData->FindKey(szSteamID, false);
-	if(!hData) return "";
-	const char* sValue = hData->GetString(sCookieName);
-	return sValue;
+	if(!hData) return g_iMenuTypeDefault;
+	return hData->GetInt("Utils.MenuType", g_iMenuTypeDefault);
 }
 
 bool SetClientCookie(int iSlot, const char* sCookieName, const char* sData)
@@ -766,13 +761,7 @@ void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
 				g_pPlayersApi->SendClientAuthCallback(i, iSteamId);
 
 				if(!g_pCookies) {
-					const char* szMenuType = GetClientCookie(i, "Utils.MenuType");
-					if (szMenuType && szMenuType[0])
-						g_iMenuType[i] = atoi(szMenuType);
-					else {
-						g_iMenuType[i] = g_iMenuTypeDefault;
-						SetClientCookie(i, "Utils.MenuType", std::to_string(g_iMenuTypeDefault).c_str());
-					}
+					g_iMenuType[i] = GetClientCookieMenuType(i);
 				}
 				return;
 			}
@@ -1017,7 +1006,6 @@ std::string GetMenuText(int iSlot)
 			bRight = true;
 		else if(buttons & (1 << 5))
 			bEnter = true;
-
 		if(g_iMenuLastButtonInput[iSlot] < iTime) {
 			g_iMenuLastButtonInput[iSlot] = iTime + 120;
 			if(buttons & (1 << 3)) {
@@ -1181,15 +1169,24 @@ std::string GetMenuText(int iSlot)
 	return sBuff;
 }
 
-void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
+int RountToCeil(float f)
+{
+	return (int)f + 1;
+}
+
+void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true)
 {
 	MenuPlayer& hMenuPlayer = g_MenuPlayer[iSlot];
-	if (hMenuPlayer.bEnabled && bClose)
-		hMenuPlayer.clear();
-
-	if(!hMenuPlayer.bEnabled)
+	if (hMenuPlayer.bEnabled && bClose && bReset) hMenuPlayer.clear();
+	if(!hMenuPlayer.bEnabled || !bReset)
 	{
 		g_iMenuItem[iSlot] = 1;
+		if(hMenuPlayer.iList > 0) {
+			int iLists = RountToCeil(size(hMenu.hItems) / 5);
+			while (iLists < hMenuPlayer.iList+1) {
+				hMenuPlayer.iList--;
+			}
+		}
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
 		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
@@ -1880,7 +1877,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.2";
+	return "1.7.3";
 }
 
 const char* Menus::GetDate()

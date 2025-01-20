@@ -173,7 +173,7 @@ class IMenusApi
 {
 public:
 	virtual void AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, int iType = 1) = 0;
-	virtual void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true) = 0;
+	virtual void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true) = 0;
 	virtual void SetExitMenu(Menu& hMenu, bool bExit) = 0;
 	virtual void SetBackMenu(Menu& hMenu, bool bBack) = 0;
 	virtual void SetTitleMenu(Menu& hMenu, const char* szTitle) = 0;
