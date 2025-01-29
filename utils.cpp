@@ -71,6 +71,7 @@ const char* g_szMenuURL;
 bool g_bMenuFlashFix;
 bool g_bAccessUserChangeType;
 bool g_bStopingUser;
+int g_iTimeoutMenu;
 
 int g_iOnTakeDamageAliveId = -1;
 
@@ -244,7 +245,7 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 			if(iItems > hMenuPlayer.iList+1)
 			{
 				hMenuPlayer.iList++;
-				g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+				g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false, true);
 				if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
 			}
 		}
@@ -255,7 +256,7 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 				if(hMenuPlayer.iList != 0)
 				{
 					hMenuPlayer.iList--;
-					g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false);
+					g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, false, true);
 				}
 				else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
 			}
@@ -346,7 +347,7 @@ void SettingMenu(int iSlot)
 			SettingMenu(iSlot);
 		}
 	});
-	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot);
+	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
@@ -413,6 +414,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_iDelayAuthFailKick = g_kvCore->GetInt("delay_auth_fail_kick", 30);
 		g_bAccessUserChangeType = g_kvCore->GetBool("AccessUserChangeType", true);
 		g_bStopingUser = g_kvCore->GetBool("StopingUser", false);
+		g_iTimeoutMenu = g_kvCore->GetInt("TimeoutInputMenu", 160);
 
 		if(g_bAccessUserChangeType)
 		{
@@ -981,8 +983,8 @@ std::string GetMenuText(int iSlot)
 	CPlayer_MovementServices* pMovementServices = pPlayerPawn->m_pMovementServices();
 	if(!pMovementServices) return "";
 	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
-	if(pPawn && pPawn->IsAlive() && g_bStopingUser) {
-		pPawn->m_flVelocityModifier() = 0.0f;
+	if(pPawn && pPawn->IsAlive() && g_bStopingUser && pPlayerPawn->m_nActualMoveType() == MOVETYPE_WALK) {
+		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_OBSOLETE);
 	}
 	int buttons = pMovementServices->m_nButtons().m_pButtonStates()[0];
 	auto now = std::chrono::system_clock::now();
@@ -1007,7 +1009,7 @@ std::string GetMenuText(int iSlot)
 		else if(buttons & (1 << 5))
 			bEnter = true;
 		if(g_iMenuLastButtonInput[iSlot] < iTime) {
-			g_iMenuLastButtonInput[iSlot] = iTime + 120;
+			g_iMenuLastButtonInput[iSlot] = iTime + g_iTimeoutMenu;
 			if(buttons & (1 << 3)) {
 				if(g_iMenuItem[iSlot] > 1) g_iMenuItem[iSlot]--;
 			} else if(buttons & (1 << 4)) {
@@ -1042,7 +1044,8 @@ std::string GetMenuText(int iSlot)
 				{
 					if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
 				}
-			} else if(buttons & (1 << 13)) {
+			} else if(buttons & (1 << 13) && hMenu.bExit) {
+				g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 				CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9);
 				return "";
 			}
@@ -1117,7 +1120,7 @@ std::string GetMenuText(int iSlot)
 				if(iItems <= hMenuPlayer.iList+1) {
 					if(g_bMenuAddon) sBuff += g_vecPhrases[std::string("HtmlSpaceShortButtons")];
 					else {
-						g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlSpaceButtons_Web")].c_str(), g_szMenuURL);
+						g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlSpaceShortButtons_Web")].c_str(), g_szMenuURL);
 						sBuff += sBuff2;
 					}
 				} else {
@@ -1136,7 +1139,7 @@ std::string GetMenuText(int iSlot)
 				if(hMenuPlayer.iList == 0 || !hMenu.bBack) {
 					if(g_bMenuAddon) sBuff += g_vecPhrases[std::string("HtmlSpaceShortButtons")];
 					else {
-						g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlSpaceButtons_Web")].c_str(), g_szMenuURL);
+						g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlSpaceShortButtons_Web")].c_str(), g_szMenuURL);
 						sBuff += sBuff2;
 					}
 				}
@@ -1150,17 +1153,19 @@ std::string GetMenuText(int iSlot)
 					sBuff += sBuff2;
 				}
 			}
-			else {
+			else if(hMenu.bExit) {
 				if(g_bMenuAddon) sBuff += g_vecPhrases[std::string("HtmlSpaceButtons")];
 				else {
 					g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlSpaceButtons_Web")].c_str(), g_szMenuURL);
 					sBuff += sBuff2;
 				}
 			}
-			if(g_bMenuAddon) sBuff += g_vecPhrases[std::string("HtmlFButtons")];
-			else {
-				g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlFButtons_Web")].c_str(), g_szMenuURL);
-				sBuff += sBuff2;
+			if(hMenu.bExit) {
+				if(g_bMenuAddon) sBuff += g_vecPhrases[std::string("HtmlFButtons")];
+				else {
+					g_SMAPI->Format(sBuff2, sizeof(sBuff2), g_vecPhrases[std::string("HtmlFButtons_Web")].c_str(), g_szMenuURL);
+					sBuff += sBuff2;
+				}
 			}
 
 			break;
@@ -1173,10 +1178,17 @@ int RoundToCeil(float value) {
 	return static_cast<int>(ceil(value));
 }
 
+void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
+{
+	DisplayPlayerMenu(hMenu, iSlot, bClose, true);
+}
+
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true)
 {
-	MenuPlayer& hMenuPlayer = g_MenuPlayer[iSlot];
-	if (hMenuPlayer.bEnabled && bClose && bReset) hMenuPlayer.clear();
+    MenuPlayer& hMenuPlayer = g_MenuPlayer[iSlot];
+	if (hMenuPlayer.bEnabled && bClose && bReset) {
+		hMenuPlayer.clear();
+	}
 	if(!hMenuPlayer.bEnabled || !bReset)
 	{
 		g_iMenuItem[iSlot] = 1;
@@ -1316,6 +1328,9 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
+	if(g_iMenuType[iSlot] == 2) {
+		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
+	}
 	g_MenuPlayer[iSlot].clear();
 	g_TextMenuPlayer[iSlot] = "";
 	g_iMenuItem[iSlot] = 1;
@@ -1876,7 +1891,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.3f";
+	return "1.7.4";
 }
 
 const char* Menus::GetDate()

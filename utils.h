@@ -174,7 +174,7 @@ private: // Hooks
 
 class MenusApi : public IMenusApi {
     void AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, int iType);
-    void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose, bool bReset);
+    void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose);
     void SetExitMenu(Menu& hMenu, bool bExit);
     void SetBackMenu(Menu& hMenu, bool bBack);
     void SetTitleMenu(Menu& hMenu, const char* szTitle); 
@@ -184,6 +184,7 @@ class MenusApi : public IMenusApi {
     }
 	std::string escapeString(const std::string& input);
 	bool IsMenuOpen(int iSlot);
+    void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose, bool bReset);
 };
 
 class UtilsApi : public IUtilsApi
