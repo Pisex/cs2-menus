@@ -1045,7 +1045,7 @@ std::string GetMenuText(int iSlot)
 					if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
 				}
 			} else if(buttons & (1 << 13) && hMenu.bExit) {
-				g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
+				if(g_bStopingUser) g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 				CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9);
 				return "";
 			}
@@ -1206,6 +1206,9 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			if(std::time(0) >= hMenuPlayer.iEnd)
 			{
 				hMenuPlayer.clear();
+				if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
+					g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
+				}
 				return -1.0f;
 			}
 			if(g_iMenuType[iSlot] == 1 && g_TextMenuPlayer[iSlot].size() > 0) {
@@ -1216,6 +1219,9 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 				if(szMenu.size() > 0) g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, szMenu.c_str());
 				else {
 					hMenuPlayer.clear();
+					if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
+						g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
+					}
 					return -1.0f;
 				}
 			}
@@ -1328,7 +1334,7 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
-	if(g_iMenuType[iSlot] == 2) {
+	if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
 		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 	}
 	g_MenuPlayer[iSlot].clear();
@@ -1891,7 +1897,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.4";
+	return "1.7.4f";
 }
 
 const char* Menus::GetDate()
