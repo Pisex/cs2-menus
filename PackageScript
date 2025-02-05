@@ -41,3 +41,4 @@ builder.AddCopy(os.path.join(builder.sourcePath, 'translations', 'menus.phrases.
 configs_folder = builder.AddFolder(os.path.join('addons', 'configs'))
 builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'core.cfg'), configs_folder)
 builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'signatures.ini'), configs_folder)
+configs_folder = builder.AddFolder(os.path.join('addons', 'logs'))

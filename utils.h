@@ -322,6 +322,24 @@ public:
 		}
 		return bFound;
 	}
+	bool FindCommand(const char* szCommand) {
+		bool bFound = false;
+		for(auto& item : ConsoleCommands)
+		{
+			if(item.second[std::string(szCommand)])
+			{
+				bFound = true;
+			}
+		}
+		for(auto& item : ChatCommands)
+		{
+			if(item.second[std::string(szCommand)])
+			{
+				bFound = true;
+			}
+		}
+		return bFound;
+	}
 
 	void PrintToAlert(int iSlot, const char *msg, ...);
 	void PrintToAlertAll(const char *msg, ...);
@@ -402,6 +420,8 @@ public:
 		}
 		return bFound;
 	}
+
+	const char* GetVersion();
 private:
     std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
     std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
@@ -559,6 +579,7 @@ public:
 	void EmitSound(std::vector<int> vPlayers, CEntityIndex ent, std::string sound_name, int pitch, float volume);
 	void EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, int pitch, float volume);
 	void StopSoundEvent(int iSlot, const char* sound_name);
+	IGameEventListener2* GetLegacyGameEventListener(int iSlot);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };

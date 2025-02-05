@@ -72,6 +72,7 @@ bool g_bMenuFlashFix;
 bool g_bAccessUserChangeType;
 bool g_bStopingUser;
 int g_iTimeoutMenu;
+std::vector<std::string> g_vCommandEater;
 
 int g_iOnTakeDamageAliveId = -1;
 
@@ -415,6 +416,18 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_bAccessUserChangeType = g_kvCore->GetBool("AccessUserChangeType", true);
 		g_bStopingUser = g_kvCore->GetBool("StopingUser", false);
 		g_iTimeoutMenu = g_kvCore->GetInt("TimeoutInputMenu", 160);
+
+		const char* szCommandEater = g_kvCore->GetString("commands_eater");
+		if(szCommandEater && szCommandEater[0])
+		{
+			std::string sCommandEater(szCommandEater);
+			std::istringstream ss(sCommandEater);
+			std::string token;
+			while(std::getline(ss, token, ','))
+			{
+				g_vCommandEater.push_back(token);
+			}
+		}
 
 		if(g_bAccessUserChangeType)
 		{
@@ -884,7 +897,6 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 		return;
 
 	auto iCommandPlayerSlot = ctx.GetPlayerSlot();
-
 	bool bSay = !V_strcmp(args.Arg(0), "say");
 	bool bTeamSay = !V_strcmp(args.Arg(0), "say_team");
 
@@ -894,7 +906,6 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 		auto pController = CCSPlayerController::FromSlot(iSlot);
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
 		bool bSilent = *args[1] == '/';
-
 		if (bCommand)
 		{
 			char *pszMessage = (char *)(args.ArgS() + 2);
@@ -919,8 +930,19 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 			char *pszMessage = (char *)(args.ArgS() + 1);
 			CCommand arg;
 			arg.Tokenize(pszMessage);
-			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg[0], ctx.GetPlayerSlot().Get(), pszMessage, false);
+			const char* arg0 = args.Arg(1);
+			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(1), ctx.GetPlayerSlot().Get(), pszMessage, false);
 			if(bFound) RETURN_META(MRES_SUPERCEDE);
+			else if(g_vCommandEater.size() > 0 && g_pUtilsApi->FindCommand(arg0))
+			{
+				for(auto& command : g_vCommandEater)
+				{
+					if(arg0[0] == command[0])
+					{
+						RETURN_META(MRES_SUPERCEDE);
+					}
+				}
+			}
 		}
 	}
 }
@@ -1889,6 +1911,20 @@ void PlayersApi::StopSoundEvent(int iSlot, const char* sound_name)
 	}
 }
 
+IGameEventListener2* PlayersApi::GetLegacyGameEventListener(int iSlot)
+{
+	if(UTIL_GetLegacyGameEventListener)
+	{
+		return UTIL_GetLegacyGameEventListener(CPlayerSlot(iSlot));
+	}
+	return nullptr;
+}
+
+const char* UtilsApi::GetVersion()
+{
+	return g_PLAPI->GetVersion();
+}
+
 ///////////////////////////////////////
 const char* Menus::GetLicense()
 {
@@ -1897,7 +1933,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.4f";
+	return "1.7.5";
 }
 
 const char* Menus::GetDate()

@@ -13,6 +13,9 @@ class CEntitySystem;
 class CGlobalVars;
 class IGameEvent;
 class IGameEventManager2;
+struct CTakeDamageInfoContainer;
+class CTakeDamageInfo;
+class IGameEventListener2;
 
 /////////////////////////////////////////////////////////////////
 ///////////////////////      PLAYERS     //////////////////////////
@@ -46,6 +49,7 @@ public:
     virtual void EmitSound(std::vector<int> vPlayers, CEntityIndex ent, std::string sound_name, int pitch, float volume) = 0;
 	virtual void EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, int pitch, float volume) = 0;
 	virtual void StopSoundEvent(int iSlot, const char* sound_name) = 0;
+    virtual IGameEventListener2* GetLegacyGameEventListener(int iSlot) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -116,6 +120,7 @@ public:
     virtual void CollisionRulesChanged(CBaseEntity* pEnt) = 0;
     virtual void TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity) = 0;
     virtual void HookIsHearingClient(SourceMM::PluginId id, OnHearingClientCallback callback) = 0;
+    virtual const char* GetVersion() = 0;
 };
 
 /////////////////////////////////////////////////////////////////
