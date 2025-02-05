@@ -927,11 +927,14 @@ void Menus::OnDispatchConCommand(ConCommandHandle cmdHandle, const CCommandConte
 
 		if(std::string(args[1]).size() > 1)
 		{
-			char *pszMessage = (char *)(args.ArgS() + 1);
+			const char* pszArgS = args.ArgS();
+			const char* pszMessage;
+			if(pszArgS[0] == '"') pszMessage = (char *)(pszArgS + 1);
+			else pszMessage = pszArgS;
 			CCommand arg;
 			arg.Tokenize(pszMessage);
-			const char* arg0 = args.Arg(1);
-			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(1), ctx.GetPlayerSlot().Get(), pszMessage, false);
+			const char* arg0 = arg.Arg(0);
+			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg0, ctx.GetPlayerSlot().Get(), pszMessage, false);
 			if(bFound) RETURN_META(MRES_SUPERCEDE);
 			else if(g_vCommandEater.size() > 0 && g_pUtilsApi->FindCommand(arg0))
 			{
@@ -1933,7 +1936,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.5";
+	return "1.7.5f";
 }
 
 const char* Menus::GetDate()
