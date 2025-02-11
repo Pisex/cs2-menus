@@ -1009,7 +1009,7 @@ std::string GetMenuText(int iSlot)
 	if(!pMovementServices) return "";
 	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
 	if(pPawn && pPawn->IsAlive() && g_bStopingUser && pPlayerPawn->m_nActualMoveType() == MOVETYPE_WALK) {
-		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_OBSOLETE);
+		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_NONE);
 	}
 	int buttons = pMovementServices->m_nButtons().m_pButtonStates()[0];
 	auto now = std::chrono::system_clock::now();
@@ -1936,7 +1936,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.5f";
+	return "1.7.6";
 }
 
 const char* Menus::GetDate()
