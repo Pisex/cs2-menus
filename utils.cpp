@@ -42,7 +42,7 @@ KeyValues* g_hKVData;
 
 int g_iMenuType[64];
 int g_iMenuItem[64];
-uint g_iMenuLastButtonInput[64];
+std::chrono::milliseconds g_iMenuLastButtonInput[64];
 MenuPlayer g_MenuPlayer[64];
 std::string g_TextMenuPlayer[64];
 
@@ -1013,7 +1013,7 @@ std::string GetMenuText(int iSlot)
 	}
 	int buttons = pMovementServices->m_nButtons().m_pButtonStates()[0];
 	auto now = std::chrono::system_clock::now();
-	int iTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+	std::chrono::milliseconds iTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
 	bool bUp = false;
 	bool bDown = false;
@@ -1034,7 +1034,7 @@ std::string GetMenuText(int iSlot)
 		else if(buttons & (1 << 5))
 			bEnter = true;
 		if(g_iMenuLastButtonInput[iSlot] < iTime) {
-			g_iMenuLastButtonInput[iSlot] = iTime + g_iTimeoutMenu;
+			g_iMenuLastButtonInput[iSlot] = iTime + std::chrono::milliseconds(g_iTimeoutMenu);
 			if(buttons & (1 << 3)) {
 				if(g_iMenuItem[iSlot] > 1) g_iMenuItem[iSlot]--;
 			} else if(buttons & (1 << 4)) {
@@ -1936,7 +1936,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.6";
+	return "1.7.6f";
 }
 
 const char* Menus::GetDate()
