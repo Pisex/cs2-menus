@@ -359,6 +359,7 @@ public:
 		return bFound;
 	}
 
+	
 	void PrintToAlert(int iSlot, const char *msg, ...);
 	void PrintToAlertAll(const char *msg, ...);
 	
