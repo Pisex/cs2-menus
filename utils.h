@@ -317,9 +317,9 @@ public:
 		return bFound;
 	}
 	
-	// static void CommandHandler(const CCommandContext& context, const CCommand& args) {
-	// 	FindAndSendCommandCallback(args.Arg(0), context.GetPlayerSlot().Get(), args.ArgS(), true);
-	// }
+	static void CommandHandler(const CCommandContext& context, const CCommand& args) {
+		FindAndSendCommandCallback(args.Arg(0), context.GetPlayerSlot().Get(), args.ArgS(), true);
+	}
 
 	void RegCommand(SourceMM::PluginId id, const std::vector<std::string> &console, const std::vector<std::string> &chat, const CommandCallback &callback) override {
 		for (const auto &element : console) {
