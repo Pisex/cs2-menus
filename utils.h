@@ -165,7 +165,7 @@ private: // Hooks
 	void ClientCommand(CPlayerSlot slot, const CCommand &args);
 	void GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*);
-    void OnDispatchConCommand(ConCommandHandle cmd, const CCommandContext& ctx, const CCommand& args);
+    void OnDispatchConCommand(ConCommandRef cmd, const CCommandContext& ctx, const CCommand& args);
 	void OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID );
 	void OnGameServerSteamAPIActivated();
 	void OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse);
@@ -327,13 +327,9 @@ public:
 			if (element.find("mm_") == std::string::npos) {
 				continue;
 			}
-			ConCommandRefAbstract commandRef;
 			new ConCommand(
-				&commandRef,
 				element.c_str(),
-				[](const CCommandContext& context, const CCommand& args) {
-					CommandHandler(context, args);	
-				},
+				CommandHandler,
 				"",
 				FCVAR_LINKED_CONCOMMAND | FCVAR_SERVER_CAN_EXECUTE | FCVAR_CLIENT_CAN_EXECUTE
 			);			
