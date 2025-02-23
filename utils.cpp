@@ -376,6 +376,8 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
 	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
 	SH_ADD_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
+	
+	ConVar_Register(FCVAR_RELEASE | FCVAR_CLIENT_CAN_EXECUTE | FCVAR_GAMEDLL);
 
 	if (late)
 	{
@@ -969,15 +971,17 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 
 void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID )
 {
-	delete m_Players[slot.Get()];
-	m_Players[slot.Get()] = nullptr;
+	int iSlot = slot.Get();
+	g_pMenusCore->ClosePlayerMenu(iSlot);	
+	delete m_Players[iSlot];
+	m_Players[iSlot] = nullptr;
 
 	if (xuid == 0)
     	return;
 
-	g_MenuPlayer[slot.Get()].clear();
-	g_TextMenuPlayer[slot.Get()] = "";
-	g_iMenuItem[slot.Get()] = 1;
+	g_MenuPlayer[iSlot].clear();
+	g_TextMenuPlayer[iSlot] = "";
+	g_iMenuItem[iSlot] = 1;
 }
 
 bool MenusApi::IsMenuOpen(int iSlot) {
@@ -1527,6 +1531,7 @@ void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
 	if(UTIL_GetLegacyGameEventListener)
 	{
 		IGameEvent* pEvent = gameeventmanager->CreateEvent("show_survival_respawn_status");
+		if(!pEvent) return;
 		pEvent->SetString("loc_token", buf);
 		pEvent->SetInt("userid", iSlot);
 		pEvent->SetInt("duration", iDuration>0?iDuration:5);
@@ -1936,7 +1941,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.6f";
+	return "1.7.7";
 }
 
 const char* Menus::GetDate()

@@ -35,6 +35,9 @@
 #include <array>
 #include <thread>
 
+std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
+std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
+
 class CRecipientFilter : public IRecipientFilter
 {
 public:
@@ -221,15 +224,6 @@ public:
 
 	void SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset);
 
-    void RegCommand(SourceMM::PluginId id, const std::vector<std::string> &console, const std::vector<std::string> &chat, const CommandCallback &callback) override {
-		for (auto & element : console) {
-        	ConsoleCommands[id][element] = callback;	
-		}
-		for (auto & element : chat) {
-        	ChatCommands[id][element] = callback;	
-		}
-    }
-
 	void AddChatListenerPre(SourceMM::PluginId id, CommandCallbackPre callback) override {
         ChatHookPre[id].push_back(callback);
     }
@@ -298,7 +292,7 @@ public:
 		}
 		return bFound;
 	}
-	bool FindAndSendCommandCallback(const char* szCommand, int iSlot, const char* szContent, bool bConsole) {
+	static bool FindAndSendCommandCallback(const char* szCommand, int iSlot, const char* szContent, bool bConsole) {
 		bool bFound = false;
 		if(bConsole)
 		{
@@ -322,6 +316,34 @@ public:
 		}
 		return bFound;
 	}
+	
+	static void CommandHandler(const CCommandContext& context, const CCommand& args) {
+		FindAndSendCommandCallback(args.Arg(0), context.GetPlayerSlot().Get(), args.ArgS(), true);
+	}
+
+	void RegCommand(SourceMM::PluginId id, const std::vector<std::string> &console, const std::vector<std::string> &chat, const CommandCallback &callback) override {
+		for (const auto &element : console) {
+			ConsoleCommands[id][element] = callback;
+			if (element.find("mm_") == std::string::npos) {
+				continue;
+			}
+			ConCommandRefAbstract commandRef;
+			new ConCommand(
+				&commandRef,
+				element.c_str(),
+				[](const CCommandContext& context, const CCommand& args) {
+					CommandHandler(context, args);	
+				},
+				"",
+				FCVAR_LINKED_CONCOMMAND | FCVAR_SERVER_CAN_EXECUTE | FCVAR_CLIENT_CAN_EXECUTE
+			);			
+		}
+	
+		for (const auto &element : chat) {
+			ChatCommands[id][element] = callback;
+		}
+	}
+
 	bool FindCommand(const char* szCommand) {
 		bool bFound = false;
 		for(auto& item : ConsoleCommands)
@@ -423,8 +445,6 @@ public:
 
 	const char* GetVersion();
 private:
-    std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
-    std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
     std::map<int, std::vector<CommandCallbackPre>> ChatHookPre;
     std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
 
