@@ -317,26 +317,26 @@ public:
 		return bFound;
 	}
 	
-	static void CommandHandler(const CCommandContext& context, const CCommand& args) {
-		FindAndSendCommandCallback(args.Arg(0), context.GetPlayerSlot().Get(), args.ArgS(), true);
-	}
+	// static void CommandHandler(const CCommandContext& context, const CCommand& args) {
+	// 	FindAndSendCommandCallback(args.Arg(0), context.GetPlayerSlot().Get(), args.ArgS(), true);
+	// }
 
 	void RegCommand(SourceMM::PluginId id, const std::vector<std::string> &console, const std::vector<std::string> &chat, const CommandCallback &callback) override {
 		for (const auto &element : console) {
 			ConsoleCommands[id][element] = callback;
-			if (element.find("mm_") == std::string::npos) {
-				continue;
-			}
-			ConCommandRefAbstract commandRef;
-			new ConCommand(
-				&commandRef,
-				element.c_str(),
-				[](const CCommandContext& context, const CCommand& args) {
-					CommandHandler(context, args);	
-				},
-				"",
-				FCVAR_LINKED_CONCOMMAND | FCVAR_SERVER_CAN_EXECUTE | FCVAR_CLIENT_CAN_EXECUTE
-			);			
+			// if (element.find("mm_") == std::string::npos) {
+			// 	continue;
+			// }
+			// ConCommandRefAbstract commandRef;
+			// new ConCommand(
+			// 	&commandRef,
+			// 	element.c_str(),
+			// 	[](const CCommandContext& context, const CCommand& args) {
+			// 		CommandHandler(context, args);	
+			// 	},
+			// 	"",
+			// 	FCVAR_LINKED_CONCOMMAND | FCVAR_SERVER_CAN_EXECUTE | FCVAR_CLIENT_CAN_EXECUTE
+			// );			
 		}
 	
 		for (const auto &element : chat) {
