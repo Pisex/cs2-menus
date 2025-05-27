@@ -133,7 +133,10 @@ class MMSPluginConfig(object):
         '-Wno-switch',
         '-msse',
         '-fPIC',
-        '-frtti'
+        '-frtti',
+        '-Wno-sign-compare',
+        '-Wno-error=sign-compare',
+        '-Wno-attributes'
       ]
 
       cxx.cxxflags += ['-std=c++17']
