@@ -50,6 +50,9 @@ public:
 	virtual void EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, int pitch, float volume) = 0;
 	virtual void StopSoundEvent(int iSlot, const char* sound_name) = 0;
     virtual IGameEventListener2* GetLegacyGameEventListener(int iSlot) = 0;
+    virtual int FindPlayer(uint64 iSteamID64) = 0;
+    virtual int FindPlayer(const CSteamID* steamID) = 0;
+    virtual int FindPlayer(const char* szName) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

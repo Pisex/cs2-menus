@@ -267,6 +267,7 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 			int iItems = size(hMenu.hItems);
 			int iItem = hMenuPlayer.iList*5+iButton-1;
 			if(iItems <= iItem) return 1;
+			if(hMenu.hItems.size() <= iItem) return 1;
 			if(hMenu.hItems[iItem].iType != 1) return 1;
 			if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
 		}
@@ -1525,8 +1526,7 @@ void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
 	va_end(args);
 
 	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
-	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-		return;
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0) return;
 	int iEnd = std::time(0) + iDuration;
 	if(UTIL_GetLegacyGameEventListener)
 	{
@@ -1919,6 +1919,55 @@ void PlayersApi::StopSoundEvent(int iSlot, const char* sound_name)
 	}
 }
 
+int PlayersApi::FindPlayer(uint64 iSteamID64)
+{
+	int iSlot = -1;
+	for(int i = 0; i < 64; i++)
+	{
+		if(m_Players[i] && m_Players[i]->GetSteamId64() == iSteamID64)
+		{
+			iSlot = i;
+			break;
+		}
+	}
+	return iSlot;
+}
+
+int PlayersApi::FindPlayer(const CSteamID* steamID)
+{
+	int iSlot = -1;
+	for(int i = 0; i < 64; i++)
+	{
+		if(m_Players[i] && m_Players[i]->GetSteamId() == steamID)
+		{
+			iSlot = i;
+			break;
+		}
+	}
+	return iSlot;
+}
+
+std::string ToLowerCase(const std::string& str)
+{
+	std::string lowerStr = str;
+	std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+	return lowerStr;
+}
+
+int PlayersApi::FindPlayer(const char* szName)
+{
+	int iSlot = -1;
+	for(int i = 0; i < 64; i++)
+	{
+		if(ToLowerCase(engine->GetClientConVarValue(i, "name")) == ToLowerCase(szName))
+		{
+			iSlot = i;
+			break;
+		}
+	}
+	return iSlot;
+}
+
 IGameEventListener2* PlayersApi::GetLegacyGameEventListener(int iSlot)
 {
 	if(UTIL_GetLegacyGameEventListener)
@@ -1941,7 +1990,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.7";
+	return "1.7.8";
 }
 
 const char* Menus::GetDate()

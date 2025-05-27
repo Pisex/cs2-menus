@@ -597,6 +597,9 @@ public:
 	void EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, int pitch, float volume);
 	void StopSoundEvent(int iSlot, const char* sound_name);
 	IGameEventListener2* GetLegacyGameEventListener(int iSlot);
+	int FindPlayer(uint64 iSteamID64);
+	int FindPlayer(const CSteamID* steamID);
+	int FindPlayer(const char* szName);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };
