@@ -124,7 +124,7 @@
 	{
 		"ru"		"<img src='https://%s/d.svg' width='52' height='35' /> "
 		"en"		"<img src='https://%s/d.svg' width='52' height='35' /> "
-		"en"		"<img src='https://%s/d.svg' width='52' height='35' /> "
+		"pt-BR"		"<img src='https://%s/d.svg' width='52' height='35' /> "
 	}
 	"HtmlD_PButtons_Web"
 	{
