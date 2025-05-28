@@ -249,7 +249,7 @@
 	"MenuMenusItem0"
 	{
 		"ru"		"Чат меню"
-		"en"		"Chat menu"
+		"en"		"Chat Menu"
 		"pt-BR"		"Chat Menu"
 	}
 	"MenuMenusItem1"
