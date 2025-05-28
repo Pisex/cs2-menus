@@ -232,13 +232,13 @@
 	{
 		"ru"		" {LIGHTRED}Ваша аутентификация в Steam не удалась из-за недействительного или использованного билета. Возможно, вам придется перезапустить клиент Steam, чтобы исправить ситуацию."
 		"en"		" {LIGHTRED}Your Steam authentication failed due to an invalid or used ticket. You may have to restart your Steam client in order to fix this."
-		"pt-BR"		" {LIGHTRED}Sua autenticação no Steam falhou devido a um ticket inválido ou já utilizado. Você pode precisar reiniciar o cliente Steam para corrigir isso."
+		"pt-BR"		" {LIGHTRED}Sua Autenticação Steam falhou devido a um ticket inválido ou já utilizado. Você pode precisar reiniciar o cliente Steam para corrigir isso."
 	}
 	"AuthFailed"
 	{
 		"ru"		" {LIGHTRED}ПРЕДУПРЕЖДЕНИЕ: Вы будете кикнуты через %i секунд из-за неудачной аутентификации в Steam."
 		"en"		" {LIGHTRED}WARNING: You will be kicked in %i seconds due to failed Steam authentication."
-		"pt-BR"		" {LIGHTRED}AVISO: Você será desconectado em %i segundos devido à falha na autenticação do Steam."
+		"pt-BR"		" {LIGHTRED}AVISO: Você será kickado em %i segundos devido à falha na Autenticação Steam."
 	}
 	"MenuMenusTitle"
 	{
