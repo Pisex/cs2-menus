@@ -72,6 +72,7 @@ typedef std::function<void()> StartupCallback;
 typedef std::function<bool(int iSlot, CTakeDamageInfoContainer *&pInfoContainer)> OnTakeDamageCallback;
 typedef std::function<bool(int iSlot, CTakeDamageInfo &pInfo)> OnTakeDamagePreCallback;
 typedef std::function<bool(int iSlot)> OnHearingClientCallback;
+typedef std::function<void(const char* szMap)> MapStartCallback;
 
 class IUtilsApi
 {
@@ -124,6 +125,9 @@ public:
     virtual void TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity) = 0;
     virtual void HookIsHearingClient(SourceMM::PluginId id, OnHearingClientCallback callback) = 0;
     virtual const char* GetVersion() = 0;
+    
+    virtual void MapEndHook(SourceMM::PluginId id, StartupCallback fn) = 0;
+    virtual void MapStartHook(SourceMM::PluginId id, MapStartCallback fn) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

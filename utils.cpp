@@ -159,24 +159,37 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 
 void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo* info)
 {
-	if (pEntity)
-	{
-		CCSPlayerPawn* pPawn = (CCSPlayerPawn*)pEntity;
-		if (pPawn)
-		{
-			auto pController = pPawn->m_hController();
-			if (pController)
-			{
-				int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
-				if (iPlayerSlot >= 0 && iPlayerSlot < 64)
-				{
-					if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, *info))
-						return;
-				}
-			}
-		}
-	}
-	UTIL_TakeDamage(pEntity, info);
+    if (!pEntity || !info)
+    {
+        UTIL_TakeDamage(pEntity, info);
+        return;
+    }
+
+    CCSPlayerPawn* pPawn = dynamic_cast<CCSPlayerPawn*>(pEntity);
+    if (!pPawn)
+    {
+        UTIL_TakeDamage(pEntity, info);
+        return;
+    }
+
+    auto pController = pPawn->m_hController();
+    if (!pController)
+    {
+        UTIL_TakeDamage(pEntity, info);
+        return;
+    }
+
+    int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
+    if (iPlayerSlot < 0 || iPlayerSlot >= 64)
+    {
+        UTIL_TakeDamage(pEntity, info);
+        return;
+    }
+
+    if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, *info))
+        return;
+
+    UTIL_TakeDamage(pEntity, info);
 }
 
 std::string Colorizer(std::string str)
@@ -902,7 +915,6 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 	auto iCommandPlayerSlot = ctx.GetPlayerSlot();
 	bool bSay = !V_strcmp(args.Arg(0), "say");
 	bool bTeamSay = !V_strcmp(args.Arg(0), "say_team");
-
 	if (iCommandPlayerSlot != -1 && (bSay || bTeamSay))
 	{
 		int iSlot = iCommandPlayerSlot.Get();
@@ -937,7 +949,7 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 			CCommand arg;
 			arg.Tokenize(pszMessage);
 			const char* arg0 = arg.Arg(0);
-			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg0, ctx.GetPlayerSlot().Get(), pszMessage, false);
+			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg0, iSlot, pszMessage, false);
 			if(bFound) RETURN_META(MRES_SUPERCEDE);
 			else if(g_vCommandEater.size() > 0 && g_pUtilsApi->FindCommand(arg0))
 			{
@@ -950,6 +962,9 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 				}
 			}
 		}
+	} else {
+		bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), -1, args.ArgS(), true);
+		if(bFound) RETURN_META(MRES_SUPERCEDE);
 	}
 }
 
@@ -963,10 +978,17 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 	}
 	g_Offsets.clear();
 	g_ChainOffsets.clear();
-	g_bHasTicked = false;
 	g_pGameRules = nullptr;
 	g_pEntitySystem = GameEntitySystem();
 	gpGlobals = engine->GetServerGlobals();
+	if(g_bHasTicked) {
+		g_pUtilsApi->SendHookMapEnd();
+	} else {
+		char szMapName[256];
+		g_SMAPI->Format(szMapName, sizeof(szMapName), "%s", gpGlobals->mapname);
+		g_pUtilsApi->SendHookMapStart(szMapName);
+	}
+	g_bHasTicked = false;
 	g_pUtilsApi->SendHookStartup();
 }
 
@@ -1990,7 +2012,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.8";
+	return "1.7.9";
 }
 
 const char* Menus::GetDate()

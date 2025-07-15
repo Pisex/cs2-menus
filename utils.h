@@ -217,6 +217,14 @@ public:
 	void StartupServer(SourceMM::PluginId id, StartupCallback fn) override {
 		StartupHook[id].push_back(fn);
 	}
+
+	void MapEndHook(SourceMM::PluginId id, StartupCallback fn) override {
+		MapEndHooks[id].push_back(fn);
+	}
+
+	void MapStartHook(SourceMM::PluginId id, MapStartCallback fn) override {
+		MapStartHooks[id].push_back(fn);
+	}
 	
 	void OnGetGameRules(SourceMM::PluginId id, StartupCallback fn) override {
 		GetGameRules[id].push_back(fn);
@@ -251,6 +259,28 @@ public:
 			for (auto& callback : item.second) {
 				if (callback) {
 					callback();
+				}
+			}
+		}
+	}
+
+	void SendHookMapEnd() {
+		for(auto& item : MapEndHooks)
+		{
+			for (auto& callback : item.second) {
+				if (callback) {
+					callback();
+				}
+			}
+		}
+	}
+
+	void SendHookMapStart(const char* szMap) {
+		for(auto& item : MapStartHooks)
+		{
+			for (auto& callback : item.second) {
+				if (callback) {
+					callback(szMap);
 				}
 			}
 		}
@@ -378,6 +408,8 @@ public:
 		ChatHookPre[id].clear();
 		ChatHookPost[id].clear();
 		StartupHook[id].clear();
+		MapEndHooks[id].clear();
+		MapStartHooks[id].clear();
 		GetGameRules[id].clear();
 		OnTakeDamageHookPre[id].clear();
 		OnTakeDamageHook[id].clear();
@@ -446,6 +478,8 @@ private:
     std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
 
     std::map<int, std::vector<StartupCallback>> StartupHook;
+	std::map<int, std::vector<StartupCallback>> MapEndHooks;
+	std::map<int, std::vector<MapStartCallback>> MapStartHooks;
     std::map<int, std::vector<StartupCallback>> GetGameRules;
 
     std::map<int, std::map<std::string, EventCallback>> HookEvents;
