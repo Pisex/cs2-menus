@@ -76,7 +76,6 @@ std::vector<std::string> g_vCommandEater;
 
 int g_iOnTakeDamageAliveId = -1;
 
-class GameSessionConfiguration_t { };
 SH_DECL_HOOK0_void(IServerGameDLL, GameServerSteamAPIActivated, SH_NOATTRIB, 0);
 SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
 SH_DECL_HOOK2(IGameEventManager2, FireEvent, SH_NOATTRIB, 0, bool, IGameEvent*, bool);
@@ -100,11 +99,15 @@ void (*UTIL_DispatchSpawn)(CEntityInstance*, CEntityKeyValues*) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SwitchTeam)(CCSPlayerController* pPlayer, int iTeam) = nullptr;
 void (*UTIL_StopSoundEvent)(CBaseEntity *pEntity, const char *pszSound) = nullptr;
+void (*UTIL_RespawnPlayer)(CBasePlayerController* pPlayer, CEntityInstance* pPawn, bool a3, bool a4) = nullptr;
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
 SndOpEventGuid_t (*UTIL_EmitSoundFilter)(IRecipientFilter& filter, CEntityIndex ent, const EmitSound_t& params);
-void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID) = nullptr;
+void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID, void*) = nullptr;
+
+void (*UTIL_ClientPrint)(CBasePlayerController*, int, const char *, const char *, const char *, const char *, const char *) = nullptr;
+void (*UTIL_ClientPrintAll)(int, const char *, const char *, const char *, const char *, const char *) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -493,6 +496,13 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 			funchook_install(m_SayHook, 0);
 		}
 	}
+
+	UTIL_ClientPrint = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 38 4C 89 45 A0").RCast< decltype(UTIL_ClientPrint) >();
+	if(!UTIL_ClientPrint) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrint", g_PLAPI->GetLogTag());
+
+	UTIL_ClientPrintAll = libserver.FindPattern("55 48 89 E5 41 57 4D 89 CF 41 56 4D 89 C6 41 55 49 89 CD 41 54 49 89 D4 53 48 8D 5D B0").RCast< decltype(UTIL_ClientPrintAll) >();
+	if(!UTIL_ClientPrintAll) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrintAll", g_PLAPI->GetLogTag());
+
 	const char* pszTakeDamage = g_kvSigs->GetString("OnTakeDamagePre");
 	if(pszTakeDamage && pszTakeDamage[0]) {
 		UTIL_TakeDamage = libserver.FindPattern(pszTakeDamage).RCast< decltype(UTIL_TakeDamage) >();
@@ -530,6 +540,15 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		if (!UTIL_SetModel)
 		{
 			g_pUtilsApi->ErrorLog("[%s] Failed to find function to get CBaseModelEntity_SetModel", g_PLAPI->GetLogTag());
+		}
+	}
+
+	const char* pszRespawnPlayer = g_kvSigs->GetString("UTIL_RespawnPlayer");
+	if(pszRespawnPlayer && pszRespawnPlayer[0]) {
+		UTIL_RespawnPlayer = libserver.FindPattern(pszRespawnPlayer).RCast< decltype(UTIL_RespawnPlayer) >();
+		if (!UTIL_RespawnPlayer)
+		{
+			g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_RespawnPlayer", g_PLAPI->GetLogTag());
 		}
 	}
 
@@ -639,7 +658,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		}
 		else
 		{
-			gameeventmanager = gameEventManagerFn.Offset(0x1F).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
+			gameeventmanager = gameEventManagerFn.Offset(30).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
 			SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 		}
 	}
@@ -875,12 +894,9 @@ void Menus::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
 	g_flLastTickedTime = gpGlobals->curtime;
 	g_bHasTicked = true;
 
-	for (int i = g_timers.Tail(); i != g_timers.InvalidIndex();)
+	for (int i = g_timers.Count() - 1; i >= 0; i--)
 	{
 		auto timer = g_timers[i];
-
-		int prevIndex = i;
-		i = g_timers.Previous(i);
 
 		if (timer->m_flLastExecute == -1)
 			timer->m_flLastExecute = g_flUniversalTime;
@@ -891,7 +907,7 @@ void Menus::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
 			if (!timer->Execute())
 			{
 				delete timer;
-				g_timers.Remove(prevIndex);
+				g_timers.Remove(i);
 			}
 			else
 			{
@@ -907,6 +923,29 @@ void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
 	if(bFound) RETURN_META(MRES_SUPERCEDE);
 }
 
+std::string StripQuotes(const std::string& str) {
+	if (str.size() >= 2 && str.front() == '"' && str.back() == '"')
+		return str.substr(1, str.size() - 2);
+	return str;
+}
+
+std::string TrimTrailingQuote(const std::string& str) {
+	if (!str.empty() && str.back() == '"')
+		return str.substr(0, str.size() - 1);
+	return str;
+}
+
+std::vector<std::string> SplitStringBySpace(const std::string& input) {
+	std::istringstream iss(input);
+	std::vector<std::string> tokens;
+	std::string token;
+	while (iss >> token) {
+		token = TrimTrailingQuote(token);
+		tokens.push_back(token);
+	}
+	return tokens;
+}
+
 void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext& ctx, const CCommand& args)
 {
 	if (!g_pEntitySystem)
@@ -915,56 +954,56 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 	auto iCommandPlayerSlot = ctx.GetPlayerSlot();
 	bool bSay = !V_strcmp(args.Arg(0), "say");
 	bool bTeamSay = !V_strcmp(args.Arg(0), "say_team");
-	if (iCommandPlayerSlot != -1 && (bSay || bTeamSay))
+	int iSlot = iCommandPlayerSlot.Get();
+	if (iSlot != -1 && (bSay || bTeamSay))
 	{
-		int iSlot = iCommandPlayerSlot.Get();
 		auto pController = CCSPlayerController::FromSlot(iSlot);
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
 		bool bSilent = *args[1] == '/';
 		if (bCommand)
 		{
-			char *pszMessage = (char *)(args.ArgS() + 2);
-			CCommand arg;
-			arg.Tokenize(args.ArgS() + 2);
-			if(arg[0][0])
+			std::string message = args.ArgS() + 2;
+			auto tokens = SplitStringBySpace(message);
+			if (!tokens.empty())
 			{
-				if(containsOnlyDigits(std::string(arg[0])))
+				if (containsOnlyDigits(tokens[0]))
 				{
-					if(g_iMenuType[iSlot] != 2)
+					if (g_iMenuType[iSlot] != 2)
 					{
-						int iButton = atoi(arg[0]);
-						if(CheckActionMenu(iSlot, pController, iButton))
+						int iButton = atoi(tokens[0].c_str());
+						if (CheckActionMenu(iSlot, pController, iButton))
 							RETURN_META(MRES_SUPERCEDE);
 					}
 				}
 			}
 		}
 
-		if(std::string(args[1]).size() > 1)
+		if (std::string(args[1]).size() > 1)
 		{
 			const char* pszArgS = args.ArgS();
-			const char* pszMessage;
-			if(pszArgS[0] == '"') pszMessage = (char *)(pszArgS + 1);
-			else pszMessage = pszArgS;
-			CCommand arg;
-			arg.Tokenize(pszMessage);
-			const char* arg0 = arg.Arg(0);
-			bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg0, iSlot, pszMessage, false);
-			if(bFound) RETURN_META(MRES_SUPERCEDE);
-			else if(g_vCommandEater.size() > 0 && g_pUtilsApi->FindCommand(arg0))
+			const char* pszMessage = (pszArgS[0] == '"') ? pszArgS + 1 : pszArgS;
+			auto tokens = SplitStringBySpace(pszMessage);
+			if (!tokens.empty())
 			{
-				for(auto& command : g_vCommandEater)
+				const char* arg0 = tokens[0].c_str();
+				bool bFound = g_pUtilsApi->FindAndSendCommandCallback(arg0, iSlot, pszMessage, false);
+				if (bFound) RETURN_META(MRES_SUPERCEDE);
+				else if (g_vCommandEater.size() > 0 && g_pUtilsApi->FindCommand(arg0))
 				{
-					if(arg0[0] == command[0])
+					for (auto& command : g_vCommandEater)
 					{
-						RETURN_META(MRES_SUPERCEDE);
+						if (arg0[0] == command[0])
+						{
+							RETURN_META(MRES_SUPERCEDE);
+						}
 					}
 				}
 			}
 		}
-	} else {
+	}
+	else {
 		bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), -1, args.ArgS(), true);
-		if(bFound) RETURN_META(MRES_SUPERCEDE);
+		if (bFound) RETURN_META(MRES_SUPERCEDE);
 	}
 }
 
@@ -1420,9 +1459,10 @@ void UtilsApi::PrintToChatAll(const char *msg, ...)
 
 	std::string colorizedBuf = Colorizer(buf);
 
-	CRecipientFilter filter;
-	filter.AddAllPlayers();
-	ClientPrintFilter(&filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+	// CRecipientFilter filter;
+	// filter.AddAllPlayers();
+	// ClientPrintFilter(&filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+	UTIL_ClientPrintAll(HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
@@ -1443,8 +1483,9 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 	g_pUtilsApi->NextFrame([iSlot, pPlayerController, colorizedBuf](){
 		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
 		{
-			CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-			ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+			// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+			// ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
+			UTIL_ClientPrint(pPlayerController, HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
 		}
 	});
 }
@@ -1458,8 +1499,12 @@ void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
+	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
+		return;
+	UTIL_ClientPrint(pPlayerController, HUD_PRINTCONSOLE, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToConsoleAll(const char *msg, ...)
@@ -1471,9 +1516,11 @@ void UtilsApi::PrintToConsoleAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CRecipientFilter filter;
-	filter.AddAllPlayers();
-	ClientPrintFilter(&filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+	// CRecipientFilter filter;
+	// filter.AddAllPlayers();
+	// ClientPrintFilter(&filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
+
+	UTIL_ClientPrintAll(HUD_PRINTCONSOLE, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
@@ -1489,8 +1536,10 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 		return;
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
+
+	UTIL_ClientPrint(pPlayerController, HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenterAll(const char *msg, ...)
@@ -1502,9 +1551,10 @@ void UtilsApi::PrintToCenterAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CRecipientFilter filter;
-	filter.AddAllPlayers();
-	ClientPrintFilter(&filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	// CRecipientFilter filter;
+	// filter.AddAllPlayers();
+	// ClientPrintFilter(&filter, HUD_PRINTCENTER, buf, "", "", "", "");
+	UTIL_ClientPrintAll(HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
@@ -1520,8 +1570,9 @@ void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 		return;
 
-	CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
+	// ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
+	UTIL_ClientPrint(pPlayerController, HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToAlertAll(const char *msg, ...)
@@ -1533,9 +1584,10 @@ void UtilsApi::PrintToAlertAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	CRecipientFilter filter;
-	filter.AddAllPlayers();
-	ClientPrintFilter(&filter, HUD_PRINTALERT, buf, "", "", "", "");
+	// CRecipientFilter filter;
+	// filter.AddAllPlayers();
+	// ClientPrintFilter(&filter, HUD_PRINTALERT, buf, "", "", "", "");
+	UTIL_ClientPrintAll(HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
 }
 
 void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
@@ -1655,7 +1707,7 @@ void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
 void UtilsApi::AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller)
 {
 	if(UTIL_AcceptInput)
-    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0);
+    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0, nullptr);
 }
 
 void UtilsApi::NextFrame(std::function<void()> fn)
@@ -1699,7 +1751,7 @@ void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, 
     CEntityInstance* pEntity = *reinterpret_cast<CEntityInstance**>(networkVarChainer);
     if (pEntity && (pEntity->m_pEntity->m_flags & EF_IS_CONSTRUCTION_IN_PROGRESS) == 0)
 	{
-		pEntity->NetworkStateChanged(nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32));
+		pEntity->NetworkStateChanged({nLocalOffset, nArrayIndex, *reinterpret_cast<ChangeAccessorFieldPathIndex_t*>(networkVarChainer + 32)});
     }
 }
 
@@ -1849,9 +1901,24 @@ void UtilsApi::CollisionRulesChanged(CBaseEntity* pEnt)
 
 void PlayersApi::Respawn(int iSlot)
 {
-	if(!g_iRespawn) return;
-	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!g_iRespawn || !UTIL_RespawnPlayer) return;
+	CCSPlayerController* pController =  CCSPlayerController::FromSlot(iSlot);
 	if(!pController) return;
+	int iTeam = pController->GetTeam();
+	if(iTeam < 2) return;
+	CCSPlayerPawnBase* pPlayerPawn = pController->m_hPlayerPawn();
+	if (!pPlayerPawn || pPlayerPawn->m_lifeState() == LIFE_ALIVE) return;
+	iTeam = pPlayerPawn->GetTeam();
+	if(iTeam < 2) return;
+	
+	const auto currentPawn = pController->m_hPawn().Get();
+	const auto playerPawn  = pController->m_hPlayerPawn().Get();
+	if (currentPawn != playerPawn)
+	{
+		const auto pawn = UTIL_FindEntityByEHandle(playerPawn);
+		if (pawn)
+			UTIL_RespawnPlayer(pController, pawn, true, false);
+	}
 	CALL_VIRTUAL(void, g_iRespawn, pController);
 }
 
@@ -2012,7 +2079,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.7.9";
+	return "1.8.0";
 }
 
 const char* Menus::GetDate()
