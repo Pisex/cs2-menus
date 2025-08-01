@@ -41,33 +41,34 @@ std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
 class CRecipientFilter : public IRecipientFilter
 {
 public:
-	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
+	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_bInitMessage(bInitMessage), m_nBufType(nBufType) {}
 
 	~CRecipientFilter() override {}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
 
 	bool IsInitMessage(void) const override
 	{
 		return m_bInitMessage;
 	}
 
-	int GetRecipientCount(void) const override
+	NetChannelBufType_t GetNetworkBufType(void) const override
 	{
-		return m_Recipients.Count();
+		return m_nBufType;
 	}
 
-	CPlayerSlot GetRecipientIndex(int slot) const override
+	uint64 GetRecipients(void) const override
 	{
-		if (slot < 0 || slot >= GetRecipientCount())
+		uint64 mask = 0;
+
+		for (int i = 0; i < m_Recipients.Count(); ++i)
 		{
-			return CPlayerSlot(-1);
+			int slot = m_Recipients[i].Get();
+			if (slot >= 0 && slot < 64)
+			{
+				mask |= (uint64(1) << slot);
+			}
 		}
 
-		return m_Recipients[slot];
+		return mask;
 	}
 
 	void AddRecipient(CPlayerSlot slot)
@@ -101,8 +102,8 @@ private:
 		Assert(0);
 	}
 
-	NetChannelBufType_t m_nBufType;
 	bool m_bInitMessage;
+	NetChannelBufType_t m_nBufType;
 	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
 };
 
@@ -110,35 +111,34 @@ class CSingleRecipientFilter : public IRecipientFilter
 {
 public:
 	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
-		: m_nBufType(nBufType), m_bInitMessage(bInitMessage), m_iRecipient(iRecipient)
+		: m_bInitMessage(bInitMessage), m_nBufType(nBufType), m_iRecipient(iRecipient)
 	{
 	}
 
 	~CSingleRecipientFilter() override {}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
 
 	bool IsInitMessage(void) const override
 	{
 		return m_bInitMessage;
 	}
 
-	int GetRecipientCount(void) const override
+	NetChannelBufType_t GetNetworkBufType(void) const override
 	{
-		return 1;
+		return m_nBufType;
 	}
 
-	CPlayerSlot GetRecipientIndex(int slot) const override
+	uint64 GetRecipients(void) const override
 	{
-		return CPlayerSlot(m_iRecipient);
+		if (m_iRecipient >= 0 && m_iRecipient < 64)
+		{
+			return uint64(1) << m_iRecipient;
+		}
+		return 0;
 	}
 
 private:
-	NetChannelBufType_t m_nBufType;
 	bool m_bInitMessage;
+	NetChannelBufType_t m_nBufType;
 	int m_iRecipient;
 };
 
@@ -326,9 +326,11 @@ public:
 		bool bFound = false;
 		if(bConsole)
 		{
-			for(auto& item : ConsoleCommands)
+			std::string fullCommand = std::string(szCommand) + " " + std::string(szContent);
+			for (auto& item : ConsoleCommands)
 			{
-				if(item.second[std::string(szCommand)] && item.second[std::string(szCommand)](iSlot, szContent))
+				if (item.second[std::string(szCommand)] &&
+					item.second[std::string(szCommand)](iSlot, fullCommand.c_str()))
 				{
 					bFound = true;
 				}
