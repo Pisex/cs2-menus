@@ -103,11 +103,11 @@ void (*UTIL_RespawnPlayer)(CBasePlayerController* pPlayer, CEntityInstance* pPaw
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
-SndOpEventGuid_t (*UTIL_EmitSoundFilter)(IRecipientFilter& filter, CEntityIndex ent, const EmitSound_t& params);
-void (*UTIL_AcceptInput)(CEntityInstance*, const char* szString, CEntityInstance*, CEntityInstance*, const variant_t& value, int outputID, void*) = nullptr;
+SndOpEventGuid_t (*UTIL_EmitSoundFilter)(const uint64* filter, CEntityIndex ent, const EmitSound_t& params);
+void (*UTIL_AcceptInput)(CEntityInstance* pThis, const char* pInputName, CEntityInstance* pActivator, CEntityInstance* pCaller, const variant_t& pValue, int nOutputID, void* pUnk1) = nullptr;
 
-void (*UTIL_ClientPrint)(CBasePlayerController*, int, const char *, const char *, const char *, const char *, const char *) = nullptr;
-void (*UTIL_ClientPrintAll)(int, const char *, const char *, const char *, const char *, const char *) = nullptr;
+// void (*UTIL_ClientPrint)(CBasePlayerController*, int, const char *, const char *, const char *, const char *, const char *) = nullptr;
+// void (*UTIL_ClientPrintAll)(int, const char *, const char *, const char *, const char *, const char *) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -189,7 +189,7 @@ void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo* info)
         return;
     }
 
-    if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, *info))
+    if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
         return;
 
     UTIL_TakeDamage(pEntity, info);
@@ -497,11 +497,11 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		}
 	}
 
-	UTIL_ClientPrint = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 38 4C 89 45 A0").RCast< decltype(UTIL_ClientPrint) >();
-	if(!UTIL_ClientPrint) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrint", g_PLAPI->GetLogTag());
+	// UTIL_ClientPrint = libserver.FindPattern("55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 38 4C 89 45 A0").RCast< decltype(UTIL_ClientPrint) >();
+	// if(!UTIL_ClientPrint) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrint", g_PLAPI->GetLogTag());
 
-	UTIL_ClientPrintAll = libserver.FindPattern("55 48 89 E5 41 57 4D 89 CF 41 56 4D 89 C6 41 55 49 89 CD 41 54 49 89 D4 53 48 8D 5D B0").RCast< decltype(UTIL_ClientPrintAll) >();
-	if(!UTIL_ClientPrintAll) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrintAll", g_PLAPI->GetLogTag());
+	// UTIL_ClientPrintAll = libserver.FindPattern("55 48 89 E5 41 57 4D 89 CF 41 56 4D 89 C6 41 55 49 89 CD 41 54 49 89 D4 53 48 8D 5D B0").RCast< decltype(UTIL_ClientPrintAll) >();
+	// if(!UTIL_ClientPrintAll) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_ClientPrintAll", g_PLAPI->GetLogTag());
 
 	const char* pszTakeDamage = g_kvSigs->GetString("OnTakeDamagePre");
 	if(pszTakeDamage && pszTakeDamage[0]) {
@@ -922,6 +922,8 @@ void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
 	bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), slot.Get(), args.ArgS(), true);
 	if(bFound) RETURN_META(MRES_SUPERCEDE);
 }
+
+
 
 std::string StripQuotes(const std::string& str) {
 	if (str.size() >= 2 && str.front() == '"' && str.back() == '"')
@@ -1433,7 +1435,7 @@ void MenusApi::ClosePlayerMenu(int iSlot)
 	g_iMenuItem[iSlot] = 1;
 }
 
-void ClientPrintFilter(IRecipientFilter *filter, int msg_dest, const char *msg_name, const char *param1, const char *param2, const char *param3, const char *param4)
+void ClientPrintFilter(CPlayerBitVec filter, int msg_dest, const char *msg_name, const char *param1, const char *param2, const char *param3, const char *param4)
 {
 	INetworkMessageInternal *netmsg = g_pNetworkMessages->FindNetworkMessagePartial("TextMsg");
 	auto msg = netmsg->AllocateMessage()->ToPB<CUserMessageTextMsg>();
@@ -1444,7 +1446,7 @@ void ClientPrintFilter(IRecipientFilter *filter, int msg_dest, const char *msg_n
 	msg->add_param(param3);
 	msg->add_param(param4);
 
-	g_gameEventSystem->PostEventAbstract(0, false, filter, netmsg, msg, 0);
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(filter.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
     delete msg;
 }
 
@@ -1459,10 +1461,15 @@ void UtilsApi::PrintToChatAll(const char *msg, ...)
 
 	std::string colorizedBuf = Colorizer(buf);
 
-	// CRecipientFilter filter;
-	// filter.AddAllPlayers();
-	// ClientPrintFilter(&filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
-	UTIL_ClientPrintAll(HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	for (int i = 0; i < 64; i++) {
+		if (g_pPlayersApi->IsFakeClient(i)) continue;
+		CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(i);
+		if (pPlayerController && pPlayerController->m_steamID() > 0) {
+			filter.Set(i);
+		}
+	}
+	ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
 }
 
 void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
@@ -1483,9 +1490,9 @@ void UtilsApi::PrintToChat(int iSlot, const char *msg, ...)
 	g_pUtilsApi->NextFrame([iSlot, pPlayerController, colorizedBuf](){
 		if(pPlayerController->m_hPawn() && pPlayerController->m_steamID() > 0)
 		{
-			// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-			// ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
-			UTIL_ClientPrint(pPlayerController, HUD_PRINTTALK, colorizedBuf.c_str(), nullptr, nullptr, nullptr, nullptr);
+			CPlayerBitVec filter;
+			filter.Set(iSlot);
+			ClientPrintFilter(filter, HUD_PRINTTALK, colorizedBuf.c_str(), "", "", "", "");
 		}
 	});
 }
@@ -1499,12 +1506,9 @@ void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	// ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
-	CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(iSlot);
-	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
-		return;
-	UTIL_ClientPrint(pPlayerController, HUD_PRINTCONSOLE, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	filter.Set(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToConsoleAll(const char *msg, ...)
@@ -1516,11 +1520,15 @@ void UtilsApi::PrintToConsoleAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	// CRecipientFilter filter;
-	// filter.AddAllPlayers();
-	// ClientPrintFilter(&filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
-
-	UTIL_ClientPrintAll(HUD_PRINTCONSOLE, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	for (int i = 0; i < 64; i++) {
+		if (g_pPlayersApi->IsFakeClient(i)) continue;
+		CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(i);
+		if (pPlayerController && pPlayerController->m_steamID() > 0) {
+			filter.Set(i);
+		}
+	}
+	ClientPrintFilter(filter, HUD_PRINTCONSOLE, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
@@ -1536,10 +1544,9 @@ void UtilsApi::PrintToCenter(int iSlot, const char *msg, ...)
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 		return;
 
-	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	// ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
-
-	UTIL_ClientPrint(pPlayerController, HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	filter.Set(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenterAll(const char *msg, ...)
@@ -1551,10 +1558,15 @@ void UtilsApi::PrintToCenterAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	// CRecipientFilter filter;
-	// filter.AddAllPlayers();
-	// ClientPrintFilter(&filter, HUD_PRINTCENTER, buf, "", "", "", "");
-	UTIL_ClientPrintAll(HUD_PRINTCENTER, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	for (int i = 0; i < 64; i++) {
+		if (g_pPlayersApi->IsFakeClient(i)) continue;
+		CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(i);
+		if (pPlayerController && pPlayerController->m_steamID() > 0) {
+			filter.Set(i);
+		}
+	}
+	ClientPrintFilter(filter, HUD_PRINTCENTER, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
@@ -1570,9 +1582,9 @@ void UtilsApi::PrintToAlert(int iSlot, const char *msg, ...)
 	if (!pPlayerController || pPlayerController->m_steamID() <= 0)
 		return;
 
-	// CSingleRecipientFilter *filter = new CSingleRecipientFilter(iSlot);
-	// ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
-	UTIL_ClientPrint(pPlayerController, HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	filter.Set(iSlot);
+	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToAlertAll(const char *msg, ...)
@@ -1584,10 +1596,15 @@ void UtilsApi::PrintToAlertAll(const char *msg, ...)
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
-	// CRecipientFilter filter;
-	// filter.AddAllPlayers();
-	// ClientPrintFilter(&filter, HUD_PRINTALERT, buf, "", "", "", "");
-	UTIL_ClientPrintAll(HUD_PRINTALERT, buf, nullptr, nullptr, nullptr, nullptr);
+	CPlayerBitVec filter;
+	for (int i = 0; i < 64; i++) {
+		if (g_pPlayersApi->IsFakeClient(i)) continue;
+		CCSPlayerController* pPlayerController = CCSPlayerController::FromSlot(i);
+		if (pPlayerController && pPlayerController->m_steamID() > 0) {
+			filter.Set(i);
+		}
+	}
+	ClientPrintFilter(filter, HUD_PRINTALERT, buf, "", "", "", "");
 }
 
 void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
@@ -1707,7 +1724,7 @@ void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
 void UtilsApi::AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller)
 {
 	if(UTIL_AcceptInput)
-    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0, nullptr);
+    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0, 0LL);
 }
 
 void UtilsApi::NextFrame(std::function<void()> fn)
@@ -1975,11 +1992,11 @@ void PlayersApi::EmitSound(std::vector<int> vPlayers, CEntityIndex ent, std::str
             params.m_pSoundName = sound_name.c_str();
             params.m_flVolume = volume;
             params.m_nPitch = pitch;
-		CRecipientFilter filter;
+		CPlayerBitVec filter;
 		for(auto i : vPlayers) {
-			filter.AddRecipient(i);
+			filter.Set(i);
 		}
-		UTIL_EmitSoundFilter(filter, ent, params);
+		UTIL_EmitSoundFilter(reinterpret_cast<const uint64*>(filter.Base()), ent, params);
     }
 }
 
@@ -1991,8 +2008,9 @@ void PlayersApi::EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, 
 			params.m_pSoundName = sound_name.c_str();
 			params.m_flVolume = volume;
 			params.m_nPitch = pitch;
-		CSingleRecipientFilter filter(iSlot);
-		UTIL_EmitSoundFilter(filter, ent, params);
+		CPlayerBitVec filter;
+		filter.Set(iSlot);
+		UTIL_EmitSoundFilter(reinterpret_cast<const uint64*>(filter.Base()), ent, params);
 	}
 }
 
@@ -2079,7 +2097,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.0";
+	return "1.8.1";
 }
 
 const char* Menus::GetDate()

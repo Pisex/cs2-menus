@@ -70,7 +70,7 @@ typedef std::function<bool(int iSlot, const char* szContent, bool bMute, bool bT
 typedef std::function<void(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)> EventCallback;
 typedef std::function<void()> StartupCallback;
 typedef std::function<bool(int iSlot, CTakeDamageInfoContainer *&pInfoContainer)> OnTakeDamageCallback;
-typedef std::function<bool(int iSlot, CTakeDamageInfo &pInfo)> OnTakeDamagePreCallback;
+typedef std::function<bool(int iSlot, CTakeDamageInfo *pInfo)> OnTakeDamagePreCallback;
 typedef std::function<bool(int iSlot)> OnHearingClientCallback;
 typedef std::function<void(const char* szMap)> MapStartCallback;
 

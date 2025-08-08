@@ -16,7 +16,7 @@
 #include <functional>
 #include "utils.hpp"
 #include <utlstring.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include "CCSPlayerController.h"
 #include "igameeventsystem.h"
 #include <networksystem/inetworkserializer.h>
@@ -37,110 +37,6 @@
 
 std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
 std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
-
-class CRecipientFilter : public IRecipientFilter
-{
-public:
-	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) : m_bInitMessage(bInitMessage), m_nBufType(nBufType) {}
-
-	~CRecipientFilter() override {}
-
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
-
-	uint64 GetRecipients(void) const override
-	{
-		uint64 mask = 0;
-
-		for (int i = 0; i < m_Recipients.Count(); ++i)
-		{
-			int slot = m_Recipients[i].Get();
-			if (slot >= 0 && slot < 64)
-			{
-				mask |= (uint64(1) << slot);
-			}
-		}
-
-		return mask;
-	}
-
-	void AddRecipient(CPlayerSlot slot)
-	{
-		// Don't add if it already exists
-		if (m_Recipients.Find(slot) != m_Recipients.InvalidIndex())
-		{
-			return;
-		}
-
-		m_Recipients.AddToTail(slot);
-	}
-
-	void AddAllPlayers()
-	{
-		m_Recipients.RemoveAll();
-
-		for (int i = 0; i < 64; i++)
-		{
-			CCSPlayerController* pPlayer = CCSPlayerController::FromSlot(i);
-			if (!pPlayer) continue;
-
-			AddRecipient(i);
-		}
-	}
-
-private:
-	// Can't copy this unless we explicitly do it!
-	CRecipientFilter(CRecipientFilter const &source)
-	{
-		Assert(0);
-	}
-
-	bool m_bInitMessage;
-	NetChannelBufType_t m_nBufType;
-	CUtlVectorFixed<CPlayerSlot, 64> m_Recipients;
-};
-
-class CSingleRecipientFilter : public IRecipientFilter
-{
-public:
-	CSingleRecipientFilter(int iRecipient, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false)
-		: m_bInitMessage(bInitMessage), m_nBufType(nBufType), m_iRecipient(iRecipient)
-	{
-	}
-
-	~CSingleRecipientFilter() override {}
-
-	bool IsInitMessage(void) const override
-	{
-		return m_bInitMessage;
-	}
-
-	NetChannelBufType_t GetNetworkBufType(void) const override
-	{
-		return m_nBufType;
-	}
-
-	uint64 GetRecipients(void) const override
-	{
-		if (m_iRecipient >= 0 && m_iRecipient < 64)
-		{
-			return uint64(1) << m_iRecipient;
-		}
-		return 0;
-	}
-
-private:
-	bool m_bInitMessage;
-	NetChannelBufType_t m_nBufType;
-	int m_iRecipient;
-};
 
 class Menus final : public ISmmPlugin, public IMetamodListener
 {
@@ -449,7 +345,7 @@ public:
 		}
 		return bFound;
 	}
-	bool SendHookOnTakeDamagePre(int iSlot, CTakeDamageInfo &pInfo) {
+	bool SendHookOnTakeDamagePre(int iSlot, CTakeDamageInfo* pInfo) {
 		bool bFound = true;
 		for(auto& item : OnTakeDamageHookPre)
 		{
