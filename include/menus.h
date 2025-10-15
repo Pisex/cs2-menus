@@ -53,6 +53,8 @@ public:
     virtual int FindPlayer(uint64 iSteamID64) = 0;
     virtual int FindPlayer(const CSteamID* steamID) = 0;
     virtual int FindPlayer(const char* szName) = 0;
+    virtual trace_info_t RayTrace(int iSlot) = 0;
+    virtual bool UseClientCommand(int iSlot, const char* szCommand) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

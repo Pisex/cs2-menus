@@ -16,6 +16,7 @@ CGlobalVars* gpGlobals = nullptr;
 IVEngineServer2* engine = nullptr;
 CCSGameRules* g_pGameRules = nullptr;
 CEntitySystem* g_pEntitySystem = nullptr;
+CPhysicsQuery* g_pGameTraceManager = nullptr;
 IGameEventSystem* g_gameEventSystem = nullptr;
 IGameEventManager2* gameeventmanager = nullptr;
 CGameEntitySystem* g_pGameEntitySystem = nullptr;
@@ -72,6 +73,10 @@ bool g_bMenuFlashFix;
 bool g_bAccessUserChangeType;
 bool g_bStopingUser;
 int g_iTimeoutMenu;
+int g_iSoundType;
+
+std::map<std::string, std::string> g_mapSounds;
+
 std::vector<std::string> g_vCommandEater;
 
 int g_iOnTakeDamageAliveId = -1;
@@ -103,8 +108,9 @@ void (*UTIL_RespawnPlayer)(CBasePlayerController* pPlayer, CEntityInstance* pPaw
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
-SndOpEventGuid_t (*UTIL_EmitSoundFilter)(const uint64* filter, CEntityIndex ent, const EmitSound_t& params);
+SndOpEventGuid_t (*UTIL_EmitSoundFilter)(uint8_t unk1[32], IRecipientFilter& filter, CEntityIndex ent, const EmitSound_t& params);
 void (*UTIL_AcceptInput)(CEntityInstance* pThis, const char* pInputName, CEntityInstance* pActivator, CEntityInstance* pCaller, const variant_t& pValue, int nOutputID, void* pUnk1) = nullptr;
+bool (*UTIL_TraceShape)(CPhysicsQuery*, const Ray_t* ray, const Vector* start, const Vector* end, CTraceFilter* filter, trace_t* trace) = nullptr;
 
 // void (*UTIL_ClientPrint)(CBasePlayerController*, int, const char *, const char *, const char *, const char *, const char *) = nullptr;
 // void (*UTIL_ClientPrintAll)(int, const char *, const char *, const char *, const char *, const char *) = nullptr;
@@ -435,6 +441,19 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_bAccessUserChangeType = g_kvCore->GetBool("AccessUserChangeType", true);
 		g_bStopingUser = g_kvCore->GetBool("StopingUser", false);
 		g_iTimeoutMenu = g_kvCore->GetInt("TimeoutInputMenu", 160);
+		g_iSoundType = g_kvCore->GetInt("sound_type", 0);
+
+		g_mapSounds.clear();
+		const char* szBackSound = g_kvCore->GetString("sound_back", "");
+		if(szBackSound && szBackSound[0]) g_mapSounds["back"] = szBackSound;
+		const char* szNextSound = g_kvCore->GetString("sound_next", "");
+		if(szNextSound && szNextSound[0]) g_mapSounds["next"] = szNextSound;
+		const char* szSelectSound = g_kvCore->GetString("sound_select", "");
+		if(szSelectSound && szSelectSound[0]) g_mapSounds["select"] = szSelectSound;
+		const char* szExitSound = g_kvCore->GetString("sound_exit", "");
+		if(szExitSound && szExitSound[0]) g_mapSounds["exit"] = szExitSound;
+		const char* szMoveSound = g_kvCore->GetString("sound_move", "");
+		if(szMoveSound && szMoveSound[0]) g_mapSounds["move"] = szMoveSound;
 
 		const char* szCommandEater = g_kvCore->GetString("commands_eater");
 		if(szCommandEater && szCommandEater[0])
@@ -661,6 +680,22 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 			gameeventmanager = gameEventManagerFn.Offset(30).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
 			SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 		}
+	}
+
+	const char* pszTraceShape = g_kvSigs->GetString("UTIL_TraceShape");
+	if(pszTraceShape && pszTraceShape[0]) {
+		UTIL_TraceShape = libserver.FindPattern(pszTraceShape).RCast< decltype(UTIL_TraceShape) >();
+		if (!UTIL_TraceShape)
+		{
+			g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TraceShape", g_PLAPI->GetLogTag());
+		}
+	}
+
+	const char* pszGameTraceManager = g_kvSigs->GetString("GetGameTraceManager");
+	if(pszGameTraceManager && pszGameTraceManager[0]) {
+		auto gameTraceManagerFn = libserver.FindPattern(pszGameTraceManager);
+		if( !gameTraceManagerFn ) g_pUtilsApi->ErrorLog("[%s] Failed to find function to get GetGameTraceManager", g_PLAPI->GetLogTag());
+		else g_pGameTraceManager = *gameTraceManagerFn.ResolveRelativeAddress(3, 7).RCast<CPhysicsQuery**>();
 	}
 
 	new CTimer(1.0f, []()
@@ -923,8 +958,6 @@ void Menus::ClientCommand(CPlayerSlot slot, const CCommand &args)
 	if(bFound) RETURN_META(MRES_SUPERCEDE);
 }
 
-
-
 std::string StripQuotes(const std::string& str) {
 	if (str.size() >= 2 && str.front() == '"' && str.back() == '"')
 		return str.substr(1, str.size() - 2);
@@ -961,7 +994,6 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 	{
 		auto pController = CCSPlayerController::FromSlot(iSlot);
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
-		bool bSilent = *args[1] == '/';
 		if (bCommand)
 		{
 			std::string message = args.ArgS() + 2;
@@ -1104,9 +1136,23 @@ std::string GetMenuText(int iSlot)
 		if(g_iMenuLastButtonInput[iSlot] < iTime) {
 			g_iMenuLastButtonInput[iSlot] = iTime + std::chrono::milliseconds(g_iTimeoutMenu);
 			if(buttons & (1 << 3)) {
-				if(g_iMenuItem[iSlot] > 1) g_iMenuItem[iSlot]--;
+				if(g_iMenuItem[iSlot] > 1) {
+					if(g_mapSounds.find("move") != g_mapSounds.end()) {
+						const char* szSound = g_mapSounds["move"].c_str();
+						if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+						else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+					}
+					g_iMenuItem[iSlot]--;
+				}
 			} else if(buttons & (1 << 4)) {
-				if(g_iMenuItem[iSlot] < 5 && g_iMenuItem[iSlot] < hMenu.hItems.size()) g_iMenuItem[iSlot]++;
+				if(g_iMenuItem[iSlot] < 5 && g_iMenuItem[iSlot] < hMenu.hItems.size()) {
+					if(g_mapSounds.find("move") != g_mapSounds.end()) {
+						const char* szSound = g_mapSounds["move"].c_str();
+						if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+						else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+					}
+					g_iMenuItem[iSlot]++;
+				}
 			} else if(buttons & (1 << 9)) {
 				if(hMenuPlayer.iList != 0 || hMenuPlayer.hMenu.bBack)
 				{
@@ -1117,6 +1163,11 @@ std::string GetMenuText(int iSlot)
 						hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
 					}
 					else if(hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
+					if(g_mapSounds.find("back") != g_mapSounds.end()) {
+						const char* szSound = g_mapSounds["back"].c_str();
+						if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+						else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+					}
 				}
 			} else if(buttons & (1 << 10)) {
 				int iItems = size(hMenu.hItems) / 5;
@@ -1127,6 +1178,11 @@ std::string GetMenuText(int iSlot)
 					hMenuPlayer.iList++;
 					hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
 					if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
+					if(g_mapSounds.find("next") != g_mapSounds.end()) {
+						const char* szSound = g_mapSounds["next"].c_str();
+						if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+						else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+					}
 				}
 			} else if(buttons & (1 << 5)) {
 				int iButton = g_iMenuItem[iSlot];
@@ -1136,10 +1192,21 @@ std::string GetMenuText(int iSlot)
 				if(iItems > iItem && hMenu.hItems[iItem].iType == 1)
 				{
 					if(hMenu.hFunc) hMenu.hFunc(hMenu.hItems[iItem].sBack.c_str(), hMenu.hItems[iItem].sText.c_str(), iButton, iSlot);
+					
+					if(g_mapSounds.find("select") != g_mapSounds.end()) {
+						const char* szSound = g_mapSounds["select"].c_str();
+						if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+						else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+					}
 				}
 			} else if(buttons & (1 << 13) && hMenu.bExit) {
 				if(g_bStopingUser) g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 				CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9);
+				if(g_mapSounds.find("exit") != g_mapSounds.end()) {
+					const char* szSound = g_mapSounds["exit"].c_str();
+					if(g_iSoundType == 1) g_pPlayersApi->EmitSound(iSlot, pPawn->entindex(), szSound, 100, 1.0f);
+					else if(g_iSoundType == 2) engine->ClientCommand(iSlot, "play %s", szSound);
+				}
 				return "";
 			}
 		}
@@ -1988,15 +2055,16 @@ void PlayersApi::EmitSound(std::vector<int> vPlayers, CEntityIndex ent, std::str
 {
     if(UTIL_EmitSoundFilter)
     {
+		uint8_t unk[32];
         EmitSound_t params;
             params.m_pSoundName = sound_name.c_str();
             params.m_flVolume = volume;
             params.m_nPitch = pitch;
-		CPlayerBitVec filter;
+		CRecipientFilter filter;
 		for(auto i : vPlayers) {
-			filter.Set(i);
+			filter.AddRecipient(i);
 		}
-		UTIL_EmitSoundFilter(reinterpret_cast<const uint64*>(filter.Base()), ent, params);
+		UTIL_EmitSoundFilter(unk, filter, ent, params);
     }
 }
 
@@ -2004,13 +2072,13 @@ void PlayersApi::EmitSound(int iSlot, CEntityIndex ent, std::string sound_name, 
 {
 	if(UTIL_EmitSoundFilter)
 	{
+		uint8_t unk[32];
 		EmitSound_t params;
 			params.m_pSoundName = sound_name.c_str();
 			params.m_flVolume = volume;
 			params.m_nPitch = pitch;
-		CPlayerBitVec filter;
-		filter.Set(iSlot);
-		UTIL_EmitSoundFilter(reinterpret_cast<const uint64*>(filter.Base()), ent, params);
+		CSingleRecipientFilter filter(iSlot);
+		UTIL_EmitSoundFilter(unk, filter, ent, params);
 	}
 }
 
@@ -2075,6 +2143,58 @@ int PlayersApi::FindPlayer(const char* szName)
 	return iSlot;
 }
 
+trace_info_t PlayersApi::RayTrace(int iSlot)
+{
+	if(!UTIL_TraceShape) {
+		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_TraceShape", g_PLAPI->GetLogTag());
+		return trace_info_t();
+	}
+	if(!g_pGameTraceManager) {
+		g_pUtilsApi->ErrorLog("[%s] Failed to find g_pGameTraceManager", g_PLAPI->GetLogTag());
+		return trace_info_t();
+	}
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if (!pController) return trace_info_t();
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if (!pPawn) return trace_info_t();
+	Vector vecStart = pPawn->GetEyePosition();
+	QAngle angAbsAngles = pPawn->m_angEyeAngles();
+	
+	Vector vecForward;
+	AngleVectors(angAbsAngles, &vecForward);
+	Vector vecEnd = vecStart + vecForward * 16384.0f;
+
+	Ray_t ray;
+
+	trace_t trace;
+	CTraceFilter filter;
+	filter.m_nInteractsWith = 0x1C300B;
+	filter.m_nObjectSetMask = 7;
+	filter.m_nCollisionGroup = 3;
+	filter.SetPassEntity1(pPawn);
+	filter.m_nHierarchyIds[0] = pPawn->m_pCollision()->m_collisionAttribute().m_nHierarchyId();
+
+	bool result = UTIL_TraceShape(g_pGameTraceManager, &ray, &vecStart, &vecEnd, &filter, &trace);
+	if (result) {
+		trace_info_t trace_info;
+		trace_info.m_pEnt = trace.m_pEnt;
+		trace_info.m_pHitbox = trace.m_pHitbox;
+		trace_info.m_vStartPos = trace.m_vStartPos;
+		trace_info.m_vEndPos = trace.m_vEndPos;
+		trace_info.m_vHitNormal = trace.m_vHitNormal;
+		trace_info.m_vHitPoint = trace.m_vHitPoint;
+		trace_info.m_flHitOffset = trace.m_flHitOffset;
+		trace_info.m_flFraction = trace.m_flFraction;
+		trace_info.m_nTriangle = trace.m_nTriangle;
+		trace_info.m_nHitboxBoneIndex = trace.m_nHitboxBoneIndex;
+		trace_info.m_eRayType = trace.m_eRayType;
+		trace_info.m_bStartInSolid = trace.m_bStartInSolid;
+		trace_info.m_bExactHitPoint = trace.m_bExactHitPoint;
+		return trace_info;
+	}
+	return trace_info_t();
+}
+
 IGameEventListener2* PlayersApi::GetLegacyGameEventListener(int iSlot)
 {
 	if(UTIL_GetLegacyGameEventListener)
@@ -2097,7 +2217,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.1";
+	return "1.8.3";
 }
 
 const char* Menus::GetDate()

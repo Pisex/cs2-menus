@@ -16,7 +16,7 @@
 #include <functional>
 #include "utils.hpp"
 #include <utlstring.h>
-#include <keyvalues.h>
+#include <KeyValues.h>
 #include "CCSPlayerController.h"
 #include "igameeventsystem.h"
 #include <networksystem/inetworkserializer.h>
@@ -34,6 +34,54 @@
 #include <chrono>
 #include <array>
 #include <thread>
+
+class CPhysicsQuery;
+
+class CRecipientFilter : public IRecipientFilter
+{
+public:
+	CRecipientFilter(NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) :
+		m_nBufType(nBufType), m_bInitMessage(bInitMessage) {}
+
+	CRecipientFilter(IRecipientFilter* source, int exceptSlot = -1)
+	{
+		m_Recipients = source->GetRecipients();
+		m_nBufType = source->GetNetworkBufType();
+		m_bInitMessage = source->IsInitMessage();
+
+		if (exceptSlot != -1)
+			m_Recipients.Clear(exceptSlot);
+	}
+
+	~CRecipientFilter() override {}
+
+	NetChannelBufType_t GetNetworkBufType(void) const override { return m_nBufType; }
+	bool IsInitMessage(void) const override { return m_bInitMessage; }
+	const CPlayerBitVec& GetRecipients(void) const override { return m_Recipients; }
+
+	void AddRecipient(int iSlot)
+	{
+		if (iSlot >= 0 && iSlot < 64)
+			m_Recipients.Set(iSlot);
+	}
+
+protected:
+	NetChannelBufType_t m_nBufType;
+	bool m_bInitMessage;
+	CPlayerBitVec m_Recipients;
+};
+
+// Simple filter for when only 1 recipient is needed
+class CSingleRecipientFilter : public CRecipientFilter
+{
+public:
+	CSingleRecipientFilter(CPlayerSlot nRecipientSlot, NetChannelBufType_t nBufType = BUF_RELIABLE, bool bInitMessage = false) :
+		CRecipientFilter(nBufType, bInitMessage)
+	{
+		if (nRecipientSlot.Get() >= 0 && nRecipientSlot.Get() < ABSOLUTE_PLAYER_LIMIT)
+			m_Recipients.Set(nRecipientSlot.Get());
+	}
+};
 
 std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
 std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
@@ -532,6 +580,35 @@ public:
 	int FindPlayer(uint64 iSteamID64);
 	int FindPlayer(const CSteamID* steamID);
 	int FindPlayer(const char* szName);
+	trace_info_t RayTrace(int iSlot);
+	bool UseClientCommand(int iSlot, const char* szCommand) {
+		if (iSlot == -1) return false;
+		if (iSlot < 0 || iSlot >= 64) return false;
+		bool bFound = false;
+		CommandCallback fn = nullptr;
+		for(auto& item : ConsoleCommands)
+		{
+			if(item.second[std::string(szCommand)])
+			{
+				bFound = true;
+				fn = item.second[std::string(szCommand)];
+			}
+		}
+		for(auto& item : ChatCommands)
+		{
+			if(item.second[std::string(szCommand)])
+			{
+				bFound = true;
+				fn = item.second[std::string(szCommand)];
+			}
+		}
+		if(bFound && fn)
+		{
+			fn(iSlot, szCommand);
+			return true;
+		}
+		return false;
+	}
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };
