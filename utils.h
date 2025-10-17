@@ -93,6 +93,7 @@ public:
 	bool Unload(char* error, size_t maxlen);
 	void AllPluginsLoaded();
 	void* OnMetamodQuery(const char* iface, int* ret);
+	void OnPluginUnload(PluginId id);
 	bool FireEvent(IGameEvent* pEvent, bool bDontBroadcast);
 	STEAM_GAMESERVER_CALLBACK_MANUAL(Menus, OnValidateAuthTicket, ValidateAuthTicketResponse_t, m_CallbackValidateAuthTicketResponse);
 private:
@@ -348,17 +349,25 @@ public:
 	void TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity);
 	
 	void ClearAllHooks(SourceMM::PluginId id) override {
-		ConsoleCommands[id].clear();
-		ChatCommands[id].clear();
-		HookEvents[id].clear();
 		ChatHookPre[id].clear();
 		ChatHookPost[id].clear();
+
 		StartupHook[id].clear();
 		MapEndHooks[id].clear();
 		MapStartHooks[id].clear();
 		GetGameRules[id].clear();
-		OnTakeDamageHookPre[id].clear();
+
+		HookEvents[id].clear();
+
 		OnTakeDamageHook[id].clear();
+		OnTakeDamageHookPre[id].clear();
+		
+		OnHearingClientHook[id].clear();
+
+		ConsoleCommands[id].clear();
+		ChatCommands[id].clear();
+
+		m_nextFrame.clear();
 	}
 	
 	void NextFrame() {

@@ -96,7 +96,7 @@ SH_DECL_MANUALHOOK1(OnTakeDamage_Alive, 0, 0, 0, bool, CTakeDamageInfoContainer 
 
 struct SndOpEventGuid_t;
 void (*UTIL_Remove)(CEntityInstance*) = nullptr;
-void (*UTIL_TakeDamage)(CEntityInstance*, CTakeDamageInfo*) = nullptr;
+int (*UTIL_TakeDamage)(CCSPlayer_DamageReactServices*, CTakeDamageInfo*) = nullptr;
 bool (*UTIL_IsHearingClient)(void* serverClient, int index) = nullptr;
 void (*UTIL_Say)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SetModel)(CBaseModelEntity*, const char* szModel) = nullptr;
@@ -166,39 +166,22 @@ void SayHook(const CCommandContext& ctx, CCommand& args)
 	}
 }
 
-void Hook_TakeDamage(CEntityInstance* pEntity, CTakeDamageInfo* info)
+int Hook_TakeDamage(CCSPlayer_DamageReactServices* pService, CTakeDamageInfo* info)
 {
-    if (!pEntity || !info)
-    {
-        UTIL_TakeDamage(pEntity, info);
-        return;
-    }
+    if (!pService || !info) return UTIL_TakeDamage(pService, info);
 
-    CCSPlayerPawn* pPawn = dynamic_cast<CCSPlayerPawn*>(pEntity);
-    if (!pPawn)
-    {
-        UTIL_TakeDamage(pEntity, info);
-        return;
-    }
+    CCSPlayerPawn* pPawn = pService->GetPawn();
+    if (!pPawn) return UTIL_TakeDamage(pService, info);
 
     auto pController = pPawn->m_hController();
-    if (!pController)
-    {
-        UTIL_TakeDamage(pEntity, info);
-        return;
-    }
+    if (!pController) return UTIL_TakeDamage(pService, info);
 
     int iPlayerSlot = pController->GetEntityIndex().Get() - 1;
-    if (iPlayerSlot < 0 || iPlayerSlot >= 64)
-    {
-        UTIL_TakeDamage(pEntity, info);
-        return;
-    }
+    if (iPlayerSlot < 0 || iPlayerSlot >= 64) return UTIL_TakeDamage(pService, info);
 
-    if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info))
-        return;
-
-    UTIL_TakeDamage(pEntity, info);
+    if (!g_pUtilsApi->SendHookOnTakeDamagePre(iPlayerSlot, info)) return 1;
+ 	
+	return UTIL_TakeDamage(pService, info);
 }
 
 std::string Colorizer(std::string str)
@@ -242,6 +225,7 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 {
 	if(!pController) return 0;
+	if(iSlot < 0 || iSlot >= 64) return 0;
 	auto& hMenuPlayer = g_MenuPlayer[iSlot];
 	auto& hMenu = hMenuPlayer.hMenu;
 	if(hMenuPlayer.bEnabled)
@@ -755,6 +739,10 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	return true;
 }
 
+void Menus::OnPluginUnload(PluginId id) {
+	g_pUtilsApi->ClearAllHooks(id);
+}
+
 bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
 {
 	CCSPlayerPawn *pPawn = META_IFACEPTR(CCSPlayerPawn);
@@ -994,7 +982,7 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 	{
 		auto pController = CCSPlayerController::FromSlot(iSlot);
 		bool bCommand = *args[1] == '!' || *args[1] == '/';
-		if (bCommand)
+		if (pController && bCommand)
 		{
 			std::string message = args.ArgS() + 2;
 			auto tokens = SplitStringBySpace(message);
@@ -1034,9 +1022,8 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 				}
 			}
 		}
-	}
-	else {
-		bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), -1, args.ArgS(), true);
+	} else {
+		bool bFound = g_pUtilsApi->FindAndSendCommandCallback(args.Arg(0), iSlot, args.ArgS(), true);
 		if (bFound) RETURN_META(MRES_SUPERCEDE);
 	}
 }
@@ -1068,7 +1055,8 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID )
 {
 	int iSlot = slot.Get();
-	g_pMenusCore->ClosePlayerMenu(iSlot);	
+	g_pMenusCore->ClosePlayerMenu(iSlot);
+	if (iSlot < 0 || iSlot >= 64 || !m_Players[iSlot]) return;
 	delete m_Players[iSlot];
 	m_Players[iSlot] = nullptr;
 
@@ -1098,6 +1086,7 @@ void MenusApi::SetExitMenu(Menu& hMenu, bool bExit) {
 
 std::string GetMenuText(int iSlot)
 {
+	if (iSlot < 0 || iSlot >= 64) return "";
 	auto& hMenuPlayer = g_MenuPlayer[iSlot];
 	auto& hMenu = hMenuPlayer.hMenu;
 
@@ -1340,11 +1329,13 @@ int RoundToCeil(float value) {
 
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 {
+	if(iSlot < 0 || iSlot >= 64) return;
 	DisplayPlayerMenu(hMenu, iSlot, bClose, true);
 }
 
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true)
 {
+	if(iSlot < 0 || iSlot >= 64) return;
     MenuPlayer& hMenuPlayer = g_MenuPlayer[iSlot];
 	if (hMenuPlayer.bEnabled && bClose && bReset) {
 		hMenuPlayer.clear();
@@ -1494,6 +1485,7 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
+	if(iSlot < 0 || iSlot >= 64) return;
 	if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
 		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 	}
@@ -2217,7 +2209,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.3";
+	return "1.8.4";
 }
 
 const char* Menus::GetDate()
