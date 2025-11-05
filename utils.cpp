@@ -104,7 +104,7 @@ void (*UTIL_DispatchSpawn)(CEntityInstance*, CEntityKeyValues*) = nullptr;
 void (*UTIL_SayTeam)(const CCommandContext& ctx, CCommand& args) = nullptr;
 void (*UTIL_SwitchTeam)(CCSPlayerController* pPlayer, int iTeam) = nullptr;
 void (*UTIL_StopSoundEvent)(CBaseEntity *pEntity, const char *pszSound) = nullptr;
-void (*UTIL_RespawnPlayer)(CBasePlayerController* pPlayer, CEntityInstance* pPawn, bool a3, bool a4) = nullptr;
+void (*UTIL_RespawnPlayer)(CBasePlayerController* pController, CCSPlayerPawn* pPawn, bool a3, bool a4, bool a5, bool a6) = nullptr;
 IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = nullptr;
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
@@ -1980,21 +1980,9 @@ void PlayersApi::Respawn(int iSlot)
 	if(!g_iRespawn || !UTIL_RespawnPlayer) return;
 	CCSPlayerController* pController =  CCSPlayerController::FromSlot(iSlot);
 	if(!pController) return;
-	int iTeam = pController->GetTeam();
-	if(iTeam < 2) return;
-	CCSPlayerPawnBase* pPlayerPawn = pController->m_hPlayerPawn();
-	if (!pPlayerPawn || pPlayerPawn->m_lifeState() == LIFE_ALIVE) return;
-	iTeam = pPlayerPawn->GetTeam();
-	if(iTeam < 2) return;
-	
-	const auto currentPawn = pController->m_hPawn().Get();
-	const auto playerPawn  = pController->m_hPlayerPawn().Get();
-	if (currentPawn != playerPawn)
-	{
-		const auto pawn = UTIL_FindEntityByEHandle(playerPawn);
-		if (pawn)
-			UTIL_RespawnPlayer(pController, pawn, true, false);
-	}
+	CCSPlayerPawn* pawn = pController->GetPlayerPawn();
+	if(!pawn || pawn->IsAlive()) return;
+	UTIL_RespawnPlayer(pController, pawn, true, false, false, false);
 	CALL_VIRTUAL(void, g_iRespawn, pController);
 }
 
@@ -2209,7 +2197,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.4";
+	return "1.8.5";
 }
 
 const char* Menus::GetDate()

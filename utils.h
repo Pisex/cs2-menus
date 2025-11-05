@@ -58,6 +58,7 @@ public:
 	NetChannelBufType_t GetNetworkBufType(void) const override { return m_nBufType; }
 	bool IsInitMessage(void) const override { return m_bInitMessage; }
 	const CPlayerBitVec& GetRecipients(void) const override { return m_Recipients; }
+	CPlayerSlot GetPredictedByPlayerSlot() const override { return m_nPredictedByPlayerSlot; }
 
 	void AddRecipient(int iSlot)
 	{
@@ -67,6 +68,7 @@ public:
 
 protected:
 	NetChannelBufType_t m_nBufType;
+	CPlayerSlot m_nPredictedByPlayerSlot;
 	bool m_bInitMessage;
 	CPlayerBitVec m_Recipients;
 };
