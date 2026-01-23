@@ -17,6 +17,8 @@ struct CTakeDamageInfoContainer;
 class CTakeDamageInfo;
 class IGameEventListener2;
 
+struct trace_info_t;
+
 /////////////////////////////////////////////////////////////////
 ///////////////////////      PLAYERS     //////////////////////////
 /////////////////////////////////////////////////////////////////
@@ -55,6 +57,9 @@ public:
     virtual int FindPlayer(const char* szName) = 0;
     virtual trace_info_t RayTrace(int iSlot) = 0;
     virtual bool UseClientCommand(int iSlot, const char* szCommand) = 0;
+    // bHook - если true, то вызов будет через хук OnTakeDamage с возможностью отмены, если false - прямой вызов функции нанесения урона без хуков
+    virtual void TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook = true) = 0;
+    virtual void RemoveWeapons(int iSlot) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -183,6 +188,13 @@ struct MenuPlayer
     }
 };
 
+enum class MenuType : int
+{
+    CHAT = 0,
+    CENTER = 1,
+    CENTER_WASD = 2,
+};
+
 class IMenusApi
 {
 public:
@@ -196,6 +208,8 @@ public:
     virtual std::string escapeString(const std::string& input) = 0;
     virtual bool IsMenuOpen(int iSlot) = 0;
 	virtual void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true) = 0;
+    virtual void AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType = 1) = 0;
+    virtual MenuType GetMenuType(int iSlot) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

@@ -27,6 +27,7 @@ float g_flLastTickedTime;
 bool g_bHasTicked;
 
 int g_iCommitSuicide = 0;
+int g_iRemoveWeapons = 0;
 int g_iChangeTeam = 0;
 int g_iCollisionRulesChanged = 0;
 int g_iTeleport = 0;
@@ -642,6 +643,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	g_iTeleport = g_kvSigs->GetInt("Teleport", 0);
 	g_iRespawn = g_kvSigs->GetInt("Respawn", 0);
 	g_iDropWeapon = g_kvSigs->GetInt("DropWeapon", 0);
+	g_iRemoveWeapons = g_kvSigs->GetInt("RemoveWeapons", 0);
 	void* pCCSPlayerPawnVTable = libserver.GetVirtualTableByName("CCSPlayerPawn");
 	if (!pCCSPlayerPawnVTable)
 	{
@@ -1327,6 +1329,14 @@ int RoundToCeil(float value) {
 	return static_cast<int>(ceil(value));
 }
 
+MenuType MenusApi::GetMenuType(int iSlot)
+{
+    if (iSlot < 0 || iSlot >= 64)
+        return static_cast<MenuType>(g_iMenuTypeDefault);
+
+    return static_cast<MenuType>(g_iMenuType[iSlot]);
+}
+
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
@@ -1390,13 +1400,25 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			switch (hMenu.hItems[l].iType)
 			{
 				case 1:
-					g_SMAPI->Format(sBuff, sizeof(sBuff), " \x04[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
-					g_pUtilsCore->PrintToChat(iSlot, sBuff);
-					break;
 				case 2:
-					g_SMAPI->Format(sBuff, sizeof(sBuff), " \x08[!%i]\x01 %s", iCount+1, hMenu.hItems[l].sText.c_str());
+				{
+					std::string cleanText = hMenu.hItems[l].sText;
+
+					size_t startPos = 0;
+					while ((startPos = cleanText.find('<', startPos)) != std::string::npos)
+					{
+						size_t endPos = cleanText.find('>', startPos);
+						if (endPos != std::string::npos)
+							cleanText.erase(startPos, endPos - startPos + 1);
+						else
+							break;
+					}
+
+					const char* colorCode = (hMenu.hItems[l].iType == 1) ? "\x04" : "\x08";
+					g_SMAPI->Format(sBuff, sizeof(sBuff), " %s[!%i]\x01 %s", colorCode, iCount + 1, cleanText.c_str());
 					g_pUtilsCore->PrintToChat(iSlot, sBuff);
 					break;
+				}
 			}
 			iCount++;
 			if(iCount == 5 || l == hMenu.hItems.size()-1)
@@ -1473,14 +1495,24 @@ std::string MenusApi::escapeString(const std::string& input) {
 
 void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, int iType = 1)
 {
-	if(iType != 0)
-	{
-		Items hItem;
-		hItem.iType = iType;
-		hItem.sBack = std::string(sBack);
-		hItem.sText = escapeString(sText);
-		hMenu.hItems.push_back(hItem);
-	}
+    if (iType == 0) return;
+
+	Items hItem;
+	hItem.iType = iType;
+	hItem.sBack = std::string(sBack);
+	hItem.sText = escapeString(sText);
+	hMenu.hItems.push_back(hItem);
+}
+
+void MenusApi::AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType = 1)
+{
+    if (iType == 0) return;
+
+    Items hItem;
+    hItem.iType = iType;
+    hItem.sBack = std::string(sBack);
+    hItem.sText = std::string(sText);
+    hMenu.hItems.push_back(hItem);
 }
 
 void MenusApi::ClosePlayerMenu(int iSlot)
@@ -1564,6 +1596,11 @@ void UtilsApi::PrintToConsole(int iSlot, const char *msg, ...)
 	char buf[512];
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
+
+	if(iSlot < 0 || iSlot >= 64) {
+		META_CONPRINT(buf);
+		return;
+	}
 
 	CPlayerBitVec filter;
 	filter.Set(iSlot);
@@ -1671,7 +1708,7 @@ void UtilsApi::PrintToCenterHtml(int iSlot, int iDuration, const char *msg, ...)
 	va_list args;
 	va_start(args, msg);
 
-	char buf[2048];
+	char buf[8192];
 	V_vsnprintf(buf, sizeof(buf), msg, args);
 	va_end(args);
 
@@ -1831,36 +1868,30 @@ void ChainNetworkStateChanged(uintptr_t networkVarChainer, uint32 nLocalOffset, 
     }
 }
 
-void UtilsApi::SetStateChanged(CBaseEntity* CEntity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
+void UtilsApi::SetStateChanged(CBaseEntity* pEntity, const char* sClassName, const char* sFieldName, int extraOffset = 0)
 {
-	if(CEntity)
+	if(pEntity)
 	{
+		int offset, chainOffset;
 		if(g_Offsets[sClassName][sFieldName] == 0 || g_ChainOffsets[sClassName][sFieldName] == 0)
 		{
-			int offset = schema::GetServerOffset(sClassName, sFieldName);
+			offset = schema::GetServerOffset(sClassName, sFieldName);
 			g_Offsets[sClassName][sFieldName] = offset;
-			int chainOffset = schema::FindChainOffset(sClassName);
+			chainOffset = schema::FindChainOffset(sClassName);
 			g_ChainOffsets[sClassName][sFieldName] = chainOffset;
-			if (chainOffset != 0)
-			{
-				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
-				return;
-			}
-			const auto entity = static_cast<CEntityInstance*>(CEntity);
-			entity->NetworkStateChanged(offset);
 		}
 		else
 		{
-			int offset = g_Offsets[sClassName][sFieldName];
-			int chainOffset = g_ChainOffsets[sClassName][sFieldName];
-			if (chainOffset != 0)
-			{
-				ChainNetworkStateChanged((uintptr_t)(CEntity) + chainOffset, offset, 0xFFFFFFFF);
-				return;
-			}
-			const auto entity = static_cast<CEntityInstance*>(CEntity);
-			entity->NetworkStateChanged(offset);
+			offset = g_Offsets[sClassName][sFieldName];
+			chainOffset = g_ChainOffsets[sClassName][sFieldName];
 		}
+		if (chainOffset != 0)
+		{
+			ChainNetworkStateChanged((uintptr_t)(pEntity) + chainOffset, offset + extraOffset, 0xFFFFFFFF);
+			return;
+		}
+		const auto entity = static_cast<CEntityInstance*>(pEntity);
+		entity->NetworkStateChanged(offset + extraOffset);
 	}
 }
 
@@ -1960,7 +1991,9 @@ void PlayersApi::Teleport(int iSlot, const Vector *position, const QAngle *angle
 	if(!g_iTeleport) return;
 	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
 	if(!pController) return;
-	CALL_VIRTUAL(void, g_iTeleport, pController, position, angles, velocity);
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if(!pPawn) return;
+	CALL_VIRTUAL(void, g_iTeleport, pPawn, position, angles, velocity);
 }
 
 void UtilsApi::TeleportEntity(CBaseEntity* pEnt, const Vector *position, const QAngle *angles, const Vector *velocity)
@@ -2123,6 +2156,34 @@ int PlayersApi::FindPlayer(const char* szName)
 	return iSlot;
 }
 
+void PlayersApi::RemoveWeapons(int iSlot)
+{
+	if(!g_iRemoveWeapons) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if (!pController) return;
+	CCSPlayerPawn* pPlayerPawn = pController->GetPlayerPawn();
+	if (!pPlayerPawn && !pPlayerPawn->IsAlive()) return;
+	CCSPlayer_ItemServices* pItemServices = pPlayerPawn->m_pItemServices();
+	if (!pItemServices) return;
+	pItemServices->RemoveWeapons();
+}
+
+void PlayersApi::TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook)
+{
+	if(!UTIL_TakeDamage) return;
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if(!pController) return;
+	CCSPlayerPawn* pPawn = pController->GetPlayerPawn();
+	if(!pPawn) return;
+	CCSPlayer_DamageReactServices* pDamageServices = pPawn->m_pDamageReactServices();
+	if(!bHook)
+	{
+		UTIL_TakeDamage(pDamageServices, pInfo);
+		return;
+	}
+	Hook_TakeDamage(pDamageServices, pInfo);
+}
+
 trace_info_t PlayersApi::RayTrace(int iSlot)
 {
 	if(!UTIL_TraceShape) {
@@ -2197,7 +2258,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.5";
+	return "1.8.6";
 }
 
 const char* Menus::GetDate()

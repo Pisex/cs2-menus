@@ -135,6 +135,8 @@ class MenusApi : public IMenusApi {
 	std::string escapeString(const std::string& input);
 	bool IsMenuOpen(int iSlot);
     void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose, bool bReset);
+	void AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType);
+	MenuType GetMenuType(int iSlot);
 };
 
 class UtilsApi : public IUtilsApi
@@ -592,6 +594,8 @@ public:
 	int FindPlayer(const CSteamID* steamID);
 	int FindPlayer(const char* szName);
 	trace_info_t RayTrace(int iSlot);
+	void TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook);
+	void RemoveWeapons(int iSlot);
 	bool UseClientCommand(int iSlot, const char* szCommand) {
 		if (iSlot == -1) return false;
 		if (iSlot < 0 || iSlot >= 64) return false;
