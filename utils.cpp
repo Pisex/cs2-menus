@@ -860,6 +860,7 @@ void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
 
 				new CTimer(g_iDelayAuthFailKick, [i]()
 				{
+					if(!m_Players[i] || m_Players[i]->IsFakeClient() || m_Players[i]->IsAuthenticated()) return -1.f;
 					engine->DisconnectClient(i, NETWORK_DISCONNECT_KICKED_NOSTEAMLOGIN);
 					return -1.f;
 				});
@@ -2165,7 +2166,7 @@ void PlayersApi::RemoveWeapons(int iSlot)
 	if (!pPlayerPawn && !pPlayerPawn->IsAlive()) return;
 	CCSPlayer_ItemServices* pItemServices = pPlayerPawn->m_pItemServices();
 	if (!pItemServices) return;
-	pItemServices->RemoveWeapons();
+	CALL_VIRTUAL(void, g_iRemoveWeapons, pItemServices);
 }
 
 void PlayersApi::TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook)
@@ -2258,7 +2259,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.6";
+	return "1.8.6.1";
 }
 
 const char* Menus::GetDate()
