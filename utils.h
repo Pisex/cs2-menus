@@ -470,8 +470,8 @@ public:
 	uint64 GetUnauthenticatedSteamId64() { return m_UnauthenticatedSteamID->ConvertToUint64(); }
 	const CSteamID* GetUnauthenticatedSteamId() { return m_UnauthenticatedSteamID; }
 
-	uint64 GetSteamId64() { return m_SteamID?m_SteamID->ConvertToUint64():(m_UnauthenticatedSteamID?m_UnauthenticatedSteamID->ConvertToUint64():0); }
-	const CSteamID* GetSteamId() { return m_SteamID?m_SteamID:m_UnauthenticatedSteamID; }
+	uint64 GetSteamId64() { return m_SteamID?m_SteamID->ConvertToUint64():0; }
+	const CSteamID* GetSteamId() { return m_SteamID; }
 
 	void SetAuthenticated(bool bAuthenticated) { m_bAuthenticated = bAuthenticated; }
 	void SetInGame(bool bInGame) { m_bInGame = bInGame; }
@@ -596,6 +596,26 @@ public:
 	trace_info_t RayTrace(int iSlot);
 	void TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook);
 	void RemoveWeapons(int iSlot);
+
+	void SetConVar(std::vector<int> vPlayers, const char* name, const char* value);
+	void SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars);
+
+	void SetConVar(int iSlot, FakeConVar cvar) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVar(vPlayers, cvar.szCvar.c_str(), cvar.szValue.c_str());
+	}
+	void SetConVar(int iSlot, const char* name, const char* value) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVar(vPlayers, name, value);
+	}
+	void SetConVar(std::vector<int> vPlayers, FakeConVar cvar) {
+		SetConVar(vPlayers, cvar.szCvar.c_str(), cvar.szValue.c_str());
+	}
+	void SetConVars(int iSlot, std::vector<FakeConVar> cvars) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVars(vPlayers, cvars);
+	}
+
 	bool UseClientCommand(int iSlot, const char* szCommand) {
 		if (iSlot == -1) return false;
 		if (iSlot < 0 || iSlot >= 64) return false;

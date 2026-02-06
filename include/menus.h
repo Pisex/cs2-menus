@@ -25,6 +25,12 @@ struct trace_info_t;
 
 typedef std::function<void(int iSlot, uint64 iSteamID64)> OnClientAuthorizedCallback;
 
+struct FakeConVar
+{
+    std::string szCvar;
+    std::string szValue;
+};
+
 #define PLAYERS_INTERFACE "IPlayersApi"
 class IPlayersApi
 {
@@ -60,6 +66,13 @@ public:
     // bHook - если true, то вызов будет через хук OnTakeDamage с возможностью отмены, если false - прямой вызов функции нанесения урона без хуков
     virtual void TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook = true) = 0;
     virtual void RemoveWeapons(int iSlot) = 0;
+    
+    virtual void SetConVar(int iSlot, FakeConVar cvar) = 0;
+    virtual void SetConVar(int iSlot, const char* name, const char* value) = 0;
+    virtual void SetConVar(std::vector<int> vPlayers, const char* name, const char* value) = 0;
+    virtual void SetConVar(std::vector<int> vPlayers, FakeConVar cvar) = 0;
+    virtual void SetConVars(int iSlot, std::vector<FakeConVar> cvars) = 0;
+    virtual void SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

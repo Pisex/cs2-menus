@@ -2157,6 +2157,46 @@ int PlayersApi::FindPlayer(const char* szName)
 	return iSlot;
 }
 
+void PlayersApi::SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars)
+{
+	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
+	CNetMessage *msg = netmsg->AllocateMessage();
+	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
+	if (!cvarMsg) return;
+	for (const auto& cvar : cvars) {
+		CMsg_CVars_CVar *cvarEntry = cvarMsg->mutable_convars()->add_cvars();
+		cvarEntry->set_name(cvar.szCvar.c_str());
+		cvarEntry->set_value(cvar.szValue.c_str());
+	}
+
+	CPlayerBitVec recipients;
+	for (auto i : vPlayers) {
+		recipients.Set(i);
+	}
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
+
+	delete msg;
+}
+
+void PlayersApi::SetConVar(std::vector<int> vPlayers, const char* name, const char* value)
+{
+	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
+	CNetMessage *msg = netmsg->AllocateMessage();
+	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
+	if (!cvarMsg) return;
+	CMsg_CVars_CVar *cvar = cvarMsg->mutable_convars()->add_cvars();
+	cvar->set_name(name);
+	cvar->set_value(value);
+
+	CPlayerBitVec recipients;
+	for (auto i : vPlayers) {
+		recipients.Set(i);
+	}
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
+
+	delete msg;
+}
+
 void PlayersApi::RemoveWeapons(int iSlot)
 {
 	if(!g_iRemoveWeapons) return;
@@ -2259,7 +2299,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.6.1";
+	return "1.8.6.2";
 }
 
 const char* Menus::GetDate()
