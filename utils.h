@@ -432,6 +432,7 @@ public:
 	}
 
 	const char* GetVersion();
+	const char* GetServerID();
 private:
     std::map<int, std::vector<CommandCallbackPre>> ChatHookPre;
     std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
@@ -596,34 +597,27 @@ public:
 	trace_info_t RayTrace(int iSlot);
 	void TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook);
 	void RemoveWeapons(int iSlot);
-	bool UseClientCommand(int iSlot, const char* szCommand) {
-		if (iSlot == -1) return false;
-		if (iSlot < 0 || iSlot >= 64) return false;
-		bool bFound = false;
-		CommandCallback fn = nullptr;
-		for(auto& item : ConsoleCommands)
-		{
-			if(item.second[std::string(szCommand)])
-			{
-				bFound = true;
-				fn = item.second[std::string(szCommand)];
-			}
-		}
-		for(auto& item : ChatCommands)
-		{
-			if(item.second[std::string(szCommand)])
-			{
-				bFound = true;
-				fn = item.second[std::string(szCommand)];
-			}
-		}
-		if(bFound && fn)
-		{
-			fn(iSlot, szCommand);
-			return true;
-		}
-		return false;
+
+	void SetConVar(std::vector<int> vPlayers, const char* name, const char* value);
+	void SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars);
+
+	void SetConVar(int iSlot, FakeConVar cvar) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVar(vPlayers, cvar.szCvar.c_str(), cvar.szValue.c_str());
 	}
+	void SetConVar(int iSlot, const char* name, const char* value) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVar(vPlayers, name, value);
+	}
+	void SetConVar(std::vector<int> vPlayers, FakeConVar cvar) {
+		SetConVar(vPlayers, cvar.szCvar.c_str(), cvar.szValue.c_str());
+	}
+	void SetConVars(int iSlot, std::vector<FakeConVar> cvars) {
+		std::vector<int> vPlayers = {iSlot};
+		SetConVars(vPlayers, cvars);
+	}
+
+	bool UseClientCommand(int iSlot, const char* szCommand);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };

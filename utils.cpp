@@ -75,6 +75,7 @@ bool g_bAccessUserChangeType;
 bool g_bStopingUser;
 int g_iTimeoutMenu;
 int g_iSoundType;
+std::string g_szServerID;
 
 std::map<std::string, std::string> g_mapSounds;
 
@@ -427,6 +428,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_bStopingUser = g_kvCore->GetBool("StopingUser", false);
 		g_iTimeoutMenu = g_kvCore->GetInt("TimeoutInputMenu", 160);
 		g_iSoundType = g_kvCore->GetInt("sound_type", 0);
+		g_szServerID = g_kvCore->GetString("server_id", "0");
 
 		g_mapSounds.clear();
 		const char* szBackSound = g_kvCore->GetString("sound_back", "");
@@ -663,7 +665,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		}
 		else
 		{
-			gameeventmanager = gameEventManagerFn.Offset(30).ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
+			gameeventmanager = gameEventManagerFn.ResolveRelativeAddress(0x3, 0x7).GetValue<IGameEventManager2*>();
 			SH_ADD_HOOK(IGameEventManager2, FireEvent, gameeventmanager, SH_MEMBER(this, &Menus::FireEvent), false);
 		}
 	}
@@ -860,6 +862,7 @@ void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
 
 				new CTimer(g_iDelayAuthFailKick, [i]()
 				{
+					if(!m_Players[i] || m_Players[i]->IsFakeClient() || m_Players[i]->IsAuthenticated()) return -1.f;
 					engine->DisconnectClient(i, NETWORK_DISCONNECT_KICKED_NOSTEAMLOGIN);
 					return -1.f;
 				});
@@ -2156,6 +2159,46 @@ int PlayersApi::FindPlayer(const char* szName)
 	return iSlot;
 }
 
+void PlayersApi::SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars)
+{
+	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
+	CNetMessage *msg = netmsg->AllocateMessage();
+	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
+	if (!cvarMsg) return;
+	for (const auto& cvar : cvars) {
+		CMsg_CVars_CVar *cvarEntry = cvarMsg->mutable_convars()->add_cvars();
+		cvarEntry->set_name(cvar.szCvar.c_str());
+		cvarEntry->set_value(cvar.szValue.c_str());
+	}
+
+	CPlayerBitVec recipients;
+	for (auto i : vPlayers) {
+		recipients.Set(i);
+	}
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
+
+	delete msg;
+}
+
+void PlayersApi::SetConVar(std::vector<int> vPlayers, const char* name, const char* value)
+{
+	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
+	CNetMessage *msg = netmsg->AllocateMessage();
+	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
+	if (!cvarMsg) return;
+	CMsg_CVars_CVar *cvar = cvarMsg->mutable_convars()->add_cvars();
+	cvar->set_name(name);
+	cvar->set_value(value);
+
+	CPlayerBitVec recipients;
+	for (auto i : vPlayers) {
+		recipients.Set(i);
+	}
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
+
+	delete msg;
+}
+
 void PlayersApi::RemoveWeapons(int iSlot)
 {
 	if(!g_iRemoveWeapons) return;
@@ -2165,7 +2208,7 @@ void PlayersApi::RemoveWeapons(int iSlot)
 	if (!pPlayerPawn && !pPlayerPawn->IsAlive()) return;
 	CCSPlayer_ItemServices* pItemServices = pPlayerPawn->m_pItemServices();
 	if (!pItemServices) return;
-	pItemServices->RemoveWeapons();
+	CALL_VIRTUAL(void, g_iRemoveWeapons, pItemServices);
 }
 
 void PlayersApi::TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook)
@@ -2182,6 +2225,41 @@ void PlayersApi::TakeDamage(int iSlot, CTakeDamageInfo* pInfo, bool bHook)
 		return;
 	}
 	Hook_TakeDamage(pDamageServices, pInfo);
+}
+
+bool PlayersApi::UseClientCommand(int iSlot, const char* szCommand)
+{
+	if (iSlot == -1) return false;
+	if (iSlot < 0 || iSlot >= 64) return false;
+	auto tokens = SplitStringBySpace(szCommand);
+	std::string sCommand = "";
+	for (size_t i = 1; i < tokens.size(); ++i) {
+		sCommand += tokens[i] + " ";
+	}
+	bool bFound = false;
+	CommandCallback fn = nullptr;
+	for(auto& item : ConsoleCommands)
+	{
+		if(item.second[std::string(tokens[0])])
+		{
+			bFound = true;
+			fn = item.second[std::string(tokens[0])];
+		}
+	}
+	for(auto& item : ChatCommands)
+	{
+		if(item.second[std::string(tokens[0])])
+		{
+			bFound = true;
+			fn = item.second[std::string(tokens[0])];
+		}
+	}
+	if(bFound && fn)
+	{
+		fn(iSlot, sCommand.c_str());
+		return true;
+	}
+	return false;
 }
 
 trace_info_t PlayersApi::RayTrace(int iSlot)
@@ -2250,6 +2328,11 @@ const char* UtilsApi::GetVersion()
 	return g_PLAPI->GetVersion();
 }
 
+const char* UtilsApi::GetServerID()
+{
+	return g_szServerID.c_str();
+}
+
 ///////////////////////////////////////
 const char* Menus::GetLicense()
 {
@@ -2258,7 +2341,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.6";
+	return "1.8.7";
 }
 
 const char* Menus::GetDate()
