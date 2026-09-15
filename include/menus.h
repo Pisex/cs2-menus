@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 class CBaseEntity;
 class CBaseModelEntity;
@@ -16,8 +17,14 @@ class IGameEventManager2;
 struct CTakeDamageInfoContainer;
 class CTakeDamageInfo;
 class IGameEventListener2;
+struct Menu;
 
 struct trace_info_t;
+
+#define PLAYERS_INTERFACE "IPlayersApi"
+#define UTILS_INTERFACE "IUtilsApi"
+#define LAYOUT_INTERFACE "ILayoutApi"
+#define MENUS_INTERFACE "IMenusApi"
 
 /////////////////////////////////////////////////////////////////
 ///////////////////////      PLAYERS     //////////////////////////
@@ -31,7 +38,6 @@ struct FakeConVar
     std::string szValue;
 };
 
-#define PLAYERS_INTERFACE "IPlayersApi"
 class IPlayersApi
 {
 public:
@@ -82,8 +88,6 @@ public:
 class CCSGameRules;
 class CTimer;
 
-#define Utils_INTERFACE "IUtilsApi"
-
 typedef std::function<bool(int iSlot, const char* szContent)> CommandCallback;
 typedef std::function<bool(int iSlot, const char* szContent, bool bTeam)> CommandCallbackPre;
 typedef std::function<bool(int iSlot, const char* szContent, bool bMute, bool bTeam)> CommandCallbackPost;
@@ -93,6 +97,33 @@ typedef std::function<bool(int iSlot, CTakeDamageInfoContainer *&pInfoContainer)
 typedef std::function<bool(int iSlot, CTakeDamageInfo *pInfo)> OnTakeDamagePreCallback;
 typedef std::function<bool(int iSlot)> OnHearingClientCallback;
 typedef std::function<void(const char* szMap)> MapStartCallback;
+
+// Вызывается при открытии меню настроек позволяет сторонним плагинам добавить свои пункты
+typedef std::function<void(int iSlot, Menu& hMenu)> OnSettingsOpenCallback;
+// Вызывается при выборе любого пункта меню настроек (аналог MenuCallbackFunc для CallbackMenu)
+typedef std::function<void(const char* szBack, const char* szFront, int iItem, int iSlot)> OnSettingsItemCallback;
+
+// Тип всплывающего уведомления (угловой тост)
+enum class NotifyType : int
+{
+    SUCCESS = 0,
+    WARNING = 1,
+    ERROR   = 2,
+};
+
+// Угол/место экрана, в котором показывается тост
+enum class NotifyPos : int
+{
+    TOP_RIGHT     = 0,
+    TOP_LEFT      = 1,
+    BOTTOM_RIGHT  = 2,
+    BOTTOM_LEFT   = 3,
+    TOP_CENTER    = 4,
+    CENTER        = 5,
+    BOTTOM_CENTER = 6,
+    CENTER_LEFT   = 7,
+    CENTER_RIGHT  = 8,
+};
 
 class IUtilsApi
 {
@@ -150,19 +181,66 @@ public:
     virtual void MapStartHook(SourceMM::PluginId id, MapStartCallback fn) = 0;
 
     virtual const char* GetServerID() = 0;
+
+    // Если vecSlots пустой, то состояние будет установлено для всех игроков
+    // bState = true - раскрывает энтити для игроков, bState = false - скрывает
+    virtual void SetTransmitState(int iEntityIndex, bool bState, std::vector<int> vecSlots) = 0;
+
+    // Показать всплывающее уведомление (панорама-тост) конкретному игроку.
+    // iType: 0 = success, 1 = warning, 2 = error (см. NotifyType).
+    // iPos: 0=сверху-справа, 1=сверху-слева, 2=снизу-справа, 3=снизу-слева,
+    //   4=сверху-по-центру, 5=по-центру, 6=снизу-по-центру, 7=слева-по-центру,
+    //   8=справа-по-центру (см. NotifyPos).
+    // flDuration - сколько секунд висит до автоскрытия.
+    // szChatFallback - если панорама выключена в конфиге (PanoramaMenu 0),
+    //   этот текст будет отправлен в чат. Если nullptr/пусто - чат-фолбэк не используется.
+    // ВНИМАНИЕ: методы добавлены в конец vtable ради ABI-совместимости, не переносить выше.
+    virtual void ShowNotify(int iSlot, int iType, const char* szTitle, const char* szText, float flDuration = 5.0f, int iPos = 0, const char* szChatFallback = nullptr) = 0;
+
+    // То же самое, но для всех игроков на сервере.
+    virtual void ShowNotifyAll(int iType, const char* szTitle, const char* szText, float flDuration = 5.0f, int iPos = 0, const char* szChatFallback = nullptr) = 0;
+
+    virtual void OpenSettingsMenu(int iSlot) = 0;
+    virtual void HookOnSettingsOpen(SourceMM::PluginId id, OnSettingsOpenCallback callback) = 0;
+    virtual void HookOnSettingsItem(SourceMM::PluginId id, OnSettingsItemCallback callback) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
 ///////////////////////      MENUS     //////////////////////////
 /////////////////////////////////////////////////////////////////
 
-#define Menus_INTERFACE "IMenusApi"
-
 #define ITEM_HIDE 0
 #define ITEM_DEFAULT 1
 #define ITEM_DISABLED 2
 
+// Вид итема. Обычные меню (CHAT/CENTER/CENTER_WASD) используют только BUTTON.
+enum class ItemKind : int
+{
+    BUTTON = 0, // обычная кнопка
+    TOGGLE = 1, // переключатель вкл/выкл(checkbox), только для MenuType::HUD_LAYOUT
+    SELECT = 2, // выпадающий список (дропдаун), только для MenuType::HUD_LAYOUT
+};
+
 typedef std::function<void(const char* szBack, const char* szFront, int iItem, int iSlot)> MenuCallbackFunc;
+
+// Вызывается при переключении TOGGLE-итема. bState - новое состояние.
+typedef std::function<void(const char* szBack, bool bState, int iItem, int iSlot)> MenuToggleCallbackFunc;
+// Вызывается при выборе значения в SELECT-итеме. iOption - индекс выбранной опции.
+typedef std::function<void(const char* szBack, const char* szOptionBack, int iOption, int iItem, int iSlot)> MenuSelectCallbackFunc;
+
+struct SelectOption
+{
+    std::string sBack;
+    std::string sText;
+};
+
+struct Menu;
+
+struct ItemRef
+{
+    Menu* pMenu = nullptr;
+    int iIndex = -1;
+};
 
 struct Items
 {
@@ -173,7 +251,7 @@ struct Items
 
 struct Menu
 {
-    std::string szTitle;	
+    std::string szTitle;
     std::vector<Items> hItems;
     bool bBack = false;
     bool bExit = false;
@@ -208,6 +286,7 @@ enum class MenuType : int
     CHAT = 0,
     CENTER = 1,
     CENTER_WASD = 2,
+    HUD_LAYOUT = 3,
 };
 
 class IMenusApi
@@ -225,6 +304,48 @@ public:
 	virtual void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true) = 0;
     virtual void AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType = 1) = 0;
     virtual MenuType GetMenuType(int iSlot) = 0;
+    
+    /////////////////////////////////////////////////////////////////
+    // HUD_LAYOUT: toggle и select итемы.
+    // Эти итемы отрисовываются только при MenuType::HUD_LAYOUT.
+    // Для остальных типов меню они добавляются как обычные кнопки (BUTTON).
+    /////////////////////////////////////////////////////////////////
+    virtual void SetDescriptionMenu(Menu& hMenu, const char* szDescription) = 0;
+
+    // Добавить итем-переключатель (toggle). bDefault - начальное состояние.
+    // func вызывается при переключении с новым состоянием.
+    virtual void AddToggleMenu(Menu& hMenu, const char* sBack, const char* sText, bool bDefault = false, MenuToggleCallbackFunc func = nullptr, int iType = 1) = 0;
+
+    // Добавить итем-дропдаун (select). Возвращает ссылку на созданный итем,
+    // чтобы можно было наполнить его опциями через AddSelectOption.
+    // iDefault - индекс выбранной по умолчанию опции.
+    virtual ItemRef AddSelectMenu(Menu& hMenu, const char* sBack, const char* sText, int iDefault = 0, MenuSelectCallbackFunc func = nullptr, int iType = 1) = 0;
+
+    // Добавить опцию к последнему (или указанному) select-итему.
+    virtual void AddSelectOption(ItemRef hItem, const char* sOptionBack, const char* sOptionText) = 0;
+
+    // Управление состоянием toggle-итема.
+    virtual void SetToggleState(ItemRef hItem, bool bState) = 0;
+    virtual bool GetToggleState(ItemRef hItem) = 0;
+
+    // Управление выбранной опцией select-итема.
+    virtual void SetSelectedOption(ItemRef hItem, int iOption) = 0;
+    virtual int GetSelectedOption(ItemRef hItem) = 0;
+};
+
+typedef std::function<void(int iSlot, const char* szLayoutName, const char* szButton)> OnCustomHudClicked;
+
+class ILayoutApi
+{
+public:
+    virtual void Create(int iSlot, const char* szLayoutName, const char* szLayoutPath) = 0;
+    virtual void SetHasClass(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szClassName, bool bHasClass) = 0;
+    virtual void SetInputCapture(int iSlot, const char* szLayoutName, bool bCapture) = 0;
+    virtual bool GetInputCapture(int iSlot, const char* szLayoutName) = 0;
+    virtual void SetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName, CUtlString szValue) = 0;
+    virtual const char* GetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName) = 0;
+    virtual void Destroy(int iSlot, const char* szLayoutName, float flDelay) = 0;
+    virtual void HookOnCustomHudClicked(SourceMM::PluginId id, OnCustomHudClicked callback) = 0;
 };
 
 /////////////////////////////////////////////////////////////////

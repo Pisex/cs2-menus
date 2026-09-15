@@ -1,0 +1,6 @@
+syntax = "proto2";
+
+message CCSUsrMsg_CustomHudClicked {
+	optional uint32 custom_hud_layout = 1 [default = 16777215];
+	optional string button_id = 2;
+}

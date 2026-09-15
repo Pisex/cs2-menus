@@ -1,0 +1,1172 @@
+@define accent: #FFA9DE;
+@define accent-soft: rgba(96, 128, 255, 0.40);
+@define frame: rgba(140, 170, 210, 0.22);
+@define dur: 0.15s;
+@define btn-bg: rgba(255, 255, 255, 0.05);
+@define btn-bg-hover: rgba(255, 255, 255, 0.11);
+@define btn-bg-active: rgba(255, 255, 255, 0.18);
+
+@define line-color: rgba(217, 217, 217, 0.04);
+@define label-color: #8b8f94;
+
+.utils-root
+{
+	width: 100%;
+	height: 100%;
+	z-index: 2000000000;
+}
+
+.utils-theme
+{
+	width: 100%;
+	height: 100%;
+}
+
+.utils-menu
+{
+	width: 400px;
+	opacity: 1;
+	horizontal-align: center;
+	vertical-align: middle;
+	transform: scale3d(1, 1, 1);
+	transition-property: opacity, transform;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+	border-radius: 4px;
+}
+
+.utils-menu.utils-dismissed
+{
+	opacity: 0;
+	transform: scale3d(0, 1, 1);
+}
+
+.utils-bg
+{
+	width: 100%;
+	height: 100%;
+	background-color: gradient( linear, 0% 0%, 0% 100%, from( rgba(22, 30, 42, 0.82) ), to( rgba(13, 19, 28, 0.86) ) );
+	background-image: url("s2r://panorama/images/backgrounds/bluedots_large_png.vtex");
+	background-size: 360px 360px;
+	background-repeat: repeat;
+	background-img-opacity: 0.03;
+	border-radius: 4px;
+	world-blur: gaussian(2, 2, 2);
+	z-index: 0;
+}
+
+.utils-bar
+{
+	width: 4px;
+	height: 100%;
+	background-color: accent;
+	z-index: 5;
+}
+
+.utils-bar-left
+{
+	horizontal-align: left;
+}
+
+.utils-bar-right
+{
+	horizontal-align: right;
+}
+
+.utils-close-anchor
+{
+	width: 24px;
+	height: 24px;
+	horizontal-align: right;
+	vertical-align: top;
+	margin: 10px 12px 0px 0px;
+	z-index: 100;
+}
+
+.utils-hide
+{
+	visibility: collapse;
+}
+
+.utils-back-anchor
+{
+	width: 24px;
+	height: 24px;
+	horizontal-align: right;
+	vertical-align: top;
+	margin: 10px 46px 0px 0px;
+	z-index: 100;
+}
+
+.utils-back
+{
+	width: 100%;
+	height: 100%;
+	flow-children: none;
+	background-color: none;
+	border: 0px solid transparent;
+	box-shadow: none;
+	pre-transform-scale2d: 1;
+	opacity: 1;
+	transition-property: pre-transform-scale2d, opacity;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-back:hover
+{
+	pre-transform-scale2d: 1;
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-back:active
+{
+	pre-transform-scale2d: 1;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-back-arrow
+{
+	width: 16px;
+	height: 16px;
+	horizontal-align: center;
+	vertical-align: center;
+	background-image: url("s2r://panorama/images/icons/ui/expand.vsvg");
+	background-size: 14px 14px;
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	wash-color: #9fb0be;
+	transform: rotateZ(90deg);
+	transition-property: wash-color;
+	transition-duration: dur;
+}
+
+.utils-back:hover .utils-back-arrow
+{
+	wash-color: #ffffff;
+}
+
+.utils-close
+{
+	width: 100%;
+	height: 100%;
+	flow-children: none;
+	background-color: none;
+	border: 0px solid transparent;
+	box-shadow: none;
+	pre-transform-scale2d: 1;
+	transition-property: pre-transform-scale2d;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-close:hover
+{
+	pre-transform-scale2d: 1;
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-close:active
+{
+	pre-transform-scale2d: 1;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-x-line
+{
+	width: 14px;
+	height: 2px;
+	horizontal-align: center;
+	vertical-align: center;
+	background-color: #9fb0be;
+	border-radius: 1px;
+	transition-property: background-color;
+	transition-duration: dur;
+}
+
+.utils-x-a
+{
+	transform: rotateZ(45deg);
+}
+
+.utils-x-b
+{
+	transform: rotateZ(-45deg);
+}
+
+.utils-close:hover .utils-x-line
+{
+	background-color: #ffffff;
+}
+
+.utils-content
+{
+	width: 396px;
+	height: fit-children;
+	horizontal-align: center;
+	flow-children: down;
+	padding: 20px 0px 24px 0px;
+	overflow: noclip noclip;
+	z-index: 2;
+}
+
+.utils-title
+{
+	width: 100%;
+	horizontal-align: center;
+	text-align: center;
+	font-size: 24px;
+	letter-spacing: 3px;
+	text-transform: uppercase;
+	color: accent;
+	margin-bottom: -8px;
+	white-space: normal;
+	text-overflow: shrink;
+}
+
+.utils-desc
+{
+	width: 100%;
+	horizontal-align: center;
+	text-align: center;
+	font-size: 16px;
+	letter-spacing: 1px;
+	color: label-color;
+	opacity: 0.9;
+	margin-top: 7px;
+	white-space: normal;
+	text-overflow: shrink;
+}
+
+.utils-pagination
+{
+	flow-children: right;
+	horizontal-align: center;
+	vertical-align: middle;
+	height: fit-children;
+	margin-top: 7px;
+}
+
+.utils-pagination-btn
+{
+	width: 24px;
+	height: 24px;
+	vertical-align: middle;
+	margin: 0px 10px;
+	background-color: btn-bg;
+	border: 0px solid transparent;
+	border-radius: 5px;
+	background-image: url("s2r://panorama/images/icons/ui/expand.vsvg");
+	background-size: 12px 12px;
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-pagination-btn:not(.utils-disabled):hover
+{
+	background-color: btn-bg-hover;
+	cursor: pointer;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-pagination-btn:not(.utils-disabled):active
+{
+	background-color: btn-bg-active;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-pagination-btn.utils-disabled
+{
+	opacity: 0.25;
+	background-color: rgba(255, 255, 255, 0.02);
+	wash-color: rgba(120, 130, 145, 1.0);
+	saturation: 0.0;
+}
+
+.utils-pagination-label
+{
+	vertical-align: middle;
+	min-width: 60px;
+	text-align: center;
+	horizontal-align: center;
+	font-size: 14px;
+	letter-spacing: 2px;
+	color: label-color;
+}
+
+.utils-prev
+{
+	transform: rotateZ(90deg);
+}
+
+.utils-next
+{
+	transform: rotateZ(-90deg);
+}
+
+.utils-divider
+{
+	width: 90%;
+	height: 1px;
+	horizontal-align: center;
+	background-color: line-color;
+	margin-top: 14px;
+	margin-bottom: 14px;
+}
+
+.utils-select-row
+{
+	width: 100%;
+	height: 40px;
+	flow-children: right;
+	vertical-align: middle;
+	margin: 4px 0px;
+	z-index: 50;
+}
+
+.utils-select-caption
+{
+	vertical-align: middle;
+	font-size: 16px;
+	letter-spacing: 1px;
+	color: label-color;
+	width: fill-parent-flow(1.0);
+}
+
+.utils-select-btn
+{
+	width: 170px;
+	height: 40px;
+	vertical-align: middle;
+	horizontal-align: right;
+	flow-children: none;
+	background-color: btn-bg;
+	border: 0px solid transparent;
+	border-radius: 5px;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-select-btn:not(.utils-inactive):hover
+{
+	background-color: btn-bg-hover;
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-select-btn:not(.utils-inactive):active
+{
+	background-color: btn-bg-active;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-select-value
+{
+	horizontal-align: left;
+	vertical-align: center;
+	margin-left: 10px;
+	width: 120px;
+	font-size: 13px;
+	letter-spacing: 0px;
+	color: #d7e0ea;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.utils-select-arrow
+{
+	width: 12px;
+	height: 12px;
+	horizontal-align: right;
+	vertical-align: center;
+	margin-right: 12px;
+	background-image: url("s2r://panorama/images/icons/ui/expand.vsvg");
+	background-size: 12px 12px;
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	wash-color: #8b929a;
+	transition-property: transform, wash-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-select-menu
+{
+	width: 170px;
+	height: fit-children;
+	flow-children: down;
+	ignore-parent-flow: true;
+	horizontal-align: right;
+	vertical-align: top;
+	y: 46px;
+	background-color: rgba(34, 34, 36, 0.99);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 5px;
+	box-shadow: 0px 4px 14px 2px rgba(0,0,0,0.55);
+	padding: 5px 5px;
+	z-index: 1000;
+	/* opacity: 0; */
+	transform: translateY(-8px);
+	transition-property: opacity, transform;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-select-menu.utils-shown
+{
+	visibility: visible;
+}
+
+.utils-select-menu.utils-open
+{
+	opacity: 1;
+	transform: translateY(0px);
+}
+
+.utils-select-btn.utils-open .utils-select-arrow
+{
+	transform: rotateZ(180deg);
+	wash-color: #ffffff;
+}
+
+.utils-opt
+{
+	width: 100%;
+	height: 30px;
+	flow-children: none;
+	background-color: none;
+	border: 0px solid transparent;
+	border-radius: 4px;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-opt Label
+{
+	width: 140px;
+	horizontal-align: left;
+	vertical-align: center;
+	margin-left: 14px;
+	font-size: 14px;
+	letter-spacing: 1px;
+	color: #cfd4d9;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.utils-opt:hover
+{
+	background-color: rgba(70, 70, 74, 0.9);
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-opt:hover Label
+{
+	color: #ffffff;
+}
+
+.utils-opt:active
+{
+	background-color: rgba(90, 90, 96, 0.95);
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-page
+{
+	width: 100%;
+	height: fit-children;
+	overflow: noclip noclip;
+}
+
+.utils-btn-chevron
+{
+	width: 12px;
+	height: 12px;
+	horizontal-align: right;
+	vertical-align: center;
+	margin-right: 14px;
+	background-image: url("s2r://panorama/images/icons/ui/expand.vsvg");
+	background-size: 12px 12px;
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	wash-color: #8b929a;
+	transform: rotateZ(-90deg);
+	transition-property: wash-color;
+	transition-duration: dur;
+}
+
+.utils-btn-sub:hover .utils-btn-chevron
+{
+	wash-color: #ffffff;
+}
+
+.utils-buttons
+{
+	width: 90%;
+	height: 288px;
+	flow-children: down;
+	horizontal-align: center;
+	overflow: noclip noclip;
+}
+
+.utils-btn
+{
+	width: 100%;
+	height: 40px;
+	margin: 4px 0px;
+	flow-children: none;
+	background-color: btn-bg;
+	border: 0px solid transparent;
+	border-radius: 5px;
+	overflow: noclip noclip;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-btn-label
+{
+	width: 100%;
+	horizontal-align: center;
+	vertical-align: center;
+	text-align: center;
+	font-size: 17px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: #cdd8e4;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	transition-property: color;
+	transition-duration: dur;
+}
+
+.utils-btn:not(.utils-inactive):hover
+{
+	background-color: btn-bg-hover;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+	sound: "UIPanorama.generic_button_rollover";
+	cursor: pointer;
+}
+
+.utils-btn:not(.utils-inactive):hover .utils-btn-label
+{
+	color: #ffffff;
+}
+
+.utils-btn:not(.utils-inactive):active
+{
+	background-color: btn-bg-active;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-tip
+{
+	ignore-parent-flow: true;
+	horizontal-align: center;
+	vertical-align: top;
+	y: -40px;
+	height: 30px;
+	padding: 0px 14px;
+	background-color: rgba(18, 18, 20, 0.98);
+	border: 1px solid frame;
+	border-radius: 6px;
+	box-shadow: 0px 4px 14px 2px rgba(0,0,0,0.55);
+	font-size: 13px;
+	letter-spacing: 0px;
+	text-transform: none;
+	text-align: center;
+	color: #e6ebf0;
+	white-space: nowrap;
+	opacity: 0;
+	transform: translateY(8px);
+	z-index: 1000;
+	transition-property: opacity, transform;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-btn:hover .utils-tip
+{
+	opacity: 1;
+	transform: translateY(0px);
+}
+
+.utils-btn.utils-inactive,.utils-toggle.utils-inactive,.utils-select-btn.utils-inactive
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	border: 1px dashed rgba(110, 125, 140, 0.30);
+	opacity: 1;
+}
+
+.utils-btn.utils-inactive .utils-btn-label,.utils-toggle.utils-inactive .utils-toggle-label,.utils-select-btn.utils-inactive .utils-select-value
+{
+	color: #aab6c4;
+}
+
+/* ===== Menu items (state-class driven, HUD_LAYOUT type) ===== */
+
+.utils-empty
+{
+	width: 12px;
+	height: 220%;
+	vertical-align: center;
+	background-color: line-color;
+	transform: rotateZ(45deg);
+}
+
+.utils-empty-0  { margin-left: 0%; }
+.utils-empty-1  { margin-left: 10%; }
+.utils-empty-2  { margin-left: 20%; }
+.utils-empty-3  { margin-left: 30%; }
+.utils-empty-4  { margin-left: 40%; }
+.utils-empty-5  { margin-left: 50%; }
+.utils-empty-6  { margin-left: 60%; }
+.utils-empty-7  { margin-left: 70%; }
+.utils-empty-8  { margin-left: 80%; }
+.utils-empty-9  { margin-left: 90%; }
+.utils-empty-10 { margin-left: 100%; }
+
+.utils-empty-deco
+{
+	width: 100%;
+	height: 100%;
+	flow-children: none;
+	overflow: clip clip;
+}
+
+/* Base item box (used by every visible slot). */
+.utils-item
+{
+	width: 100%;
+	height: 40px;
+	margin: 4px 0px;
+	flow-children: none;
+	background-color: btn-bg;
+	border: 0px solid transparent;
+	border-radius: 5px;
+	overflow: noclip noclip;
+	z-index: 0;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-item:hover
+{
+	background-color: btn-bg-hover;
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-item:active
+{
+	background-color: btn-bg-active;
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-item.is-disabled
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	border: 1px dashed rgba(110, 125, 140, 0.30);
+	cursor: default;
+}
+
+.utils-item.is-disabled:hover
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	cursor: default;
+	sound: none;
+}
+
+.utils-item.is-disabled:active
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	sound: none;
+}
+
+.utils-item.is-disabled .utils-item-arrow
+{
+	visibility: collapse;
+}
+
+.utils-item-label
+{
+	width: 70%;
+	horizontal-align: left;
+	vertical-align: center;
+	margin-left: 16px;
+	font-size: 17px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: #cdd8e4;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	transition-property: color;
+	transition-duration: dur;
+}
+
+.utils-item:hover .utils-item-label
+{
+	color: #ffffff;
+}
+
+.utils-item-value
+{
+	horizontal-align: right;
+	vertical-align: center;
+	margin-right: 38px;
+	max-width: 45%;
+	font-size: 14px;
+	letter-spacing: 0px;
+	text-transform: none;
+	color: #8ea2b4;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.utils-item-arrow
+{
+	width: 14px;
+	height: 14px;
+	horizontal-align: right;
+	vertical-align: center;
+	margin-right: 16px;
+	background-image: url("s2r://panorama/images/icons/ui/expand.vsvg");
+	background-size: 14px 14px;
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	wash-color: #8b929a;
+	transition-property: transform, wash-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-item:hover .utils-item-arrow
+{
+	wash-color: #ffffff;
+}
+
+.utils-switch
+{
+	width: 44px;
+	height: 22px;
+	horizontal-align: right;
+	vertical-align: center;
+	margin-right: 16px;
+	flow-children: none;
+	background-color: rgba(0, 0, 0, 0.45);
+	border-radius: 11px;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-switch-knob
+{
+	width: 16px;
+	height: 16px;
+	vertical-align: center;
+	horizontal-align: left;
+	margin-left: 3px;
+	background-color: #cfd4d9;
+	border-radius: 50%;
+	box-shadow: 0px 1px 3px 0px rgba(0,0,0,0.5);
+	transition-property: horizontal-align, margin-left, background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-item.is-on .utils-switch
+{
+	background-color: accent;
+}
+
+.utils-item.is-on .utils-switch .utils-switch-knob
+{
+	horizontal-align: right;
+	margin-left: 0px;
+	margin-right: 3px;
+	background-color: #ffffff;
+}
+
+/* ---- Per-item children are hidden by default; each kind reveals its own. ---- */
+.utils-item .utils-item-value,
+.utils-item .utils-item-arrow,
+.utils-item .utils-switch,
+.utils-item .utils-select-menu,
+.utils-item .utils-empty-deco
+{
+	visibility: collapse;
+}
+
+/* Empty placeholder slot (no content on this page). */
+.utils-item.k-empty
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	border: 1px dashed rgba(110, 125, 140, 0.30);
+	cursor: not-allowed;
+}
+
+.utils-item.k-empty:hover
+{
+	background-color: rgba(6, 10, 16, 0.62);
+}
+
+.utils-item.k-empty .utils-item-label
+{
+	visibility: collapse;
+}
+
+.utils-item.k-empty .utils-empty-deco
+{
+	visibility: visible;
+}
+
+/* Value button (label + right-aligned value). */
+.utils-item.k-value .utils-item-value
+{
+	visibility: visible;
+}
+
+.utils-item.k-value .utils-item-label
+{
+	width: 52%;
+}
+
+/* Submenu button (label + chevron). */
+.utils-item.k-submenu .utils-item-arrow
+{
+	visibility: visible;
+	transform: rotateZ(-90deg);
+	margin-right: 18px;
+	background-size: 12px 12px;
+}
+
+/* Toggle (label + switch). */
+.utils-item.k-toggle .utils-switch
+{
+	visibility: visible;
+}
+
+.utils-item.k-toggle .utils-item-label
+{
+	width: 60%;
+}
+
+/* Select dropdown (label + value + arrow + hidden option list). */
+.utils-item.k-select .utils-item-value,
+.utils-item.k-select .utils-item-arrow
+{
+	visibility: visible;
+}
+
+.utils-item.k-select .utils-item-value
+{
+	margin-right: 38px;
+}
+
+.utils-item.k-select .utils-item-label
+{
+	width: 52%;
+}
+
+.utils-item.k-select.is-open
+{
+	z-index: 1000;
+	height: 178px;
+	margin-bottom: -134px;
+}
+
+.utils-item.k-select.is-open .utils-select-menu
+{
+	visibility: visible;
+}
+
+.utils-item.k-select.is-open .utils-item-arrow
+{
+	transform: rotateZ(180deg);
+	wash-color: #ffffff;
+}
+
+/* Open upward when the item sits near the bottom of the list. */
+.utils-item.k-select.is-open.is-up
+{
+	margin-top: -134px;
+	margin-bottom: 4px;
+}
+
+.utils-item.k-select.is-open.is-up .utils-select-menu
+{
+	vertical-align: bottom;
+	y: 0px;
+	margin-bottom: 46px;
+}
+
+/* ===== Disabled items (ITEM_DISABLED / is-disabled) =====
+   Ставится ПОСЛЕ kind-правил (k-submenu/k-select), которые иначе показывают
+   стрелку. Убираем стрелку и любой ховер-фидбек на выключенных пунктах. */
+.utils-item.is-disabled.k-submenu .utils-item-arrow,
+.utils-item.is-disabled.k-select .utils-item-arrow,
+.utils-item.is-disabled .utils-item-arrow
+{
+	visibility: collapse;
+}
+
+.utils-item.is-disabled:hover
+{
+	background-color: rgba(6, 10, 16, 0.62);
+	cursor: default;
+	sound: none;
+}
+
+.utils-item.is-disabled:hover .utils-item-label
+{
+	color: #aab6c4;
+}
+
+.utils-item.is-disabled:hover .utils-item-arrow
+{
+	wash-color: #8b929a;
+}
+
+.utils-select-menu
+{
+	width: 170px;
+	height: fit-children;
+	flow-children: down;
+	ignore-parent-flow: true;
+	horizontal-align: right;
+	vertical-align: top;
+	y: 46px;
+	background-color: rgba(34, 34, 36, 0.99);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 5px;
+	box-shadow: 0px 4px 14px 2px rgba(0,0,0,0.55);
+	padding: 5px 5px;
+	z-index: 1000;
+}
+
+.utils-imenu
+{
+	width: 170px;
+	horizontal-align: right;
+	margin-right: 12px;
+	max-height: 132px;
+	overflow: clip scroll;
+}
+
+.utils-opt
+{
+	width: 100%;
+	height: 30px;
+	flow-children: none;
+	background-color: none;
+	border: 0px solid transparent;
+	border-radius: 4px;
+	transition-property: background-color;
+	transition-duration: dur;
+	transition-timing-function: ease-out;
+}
+
+.utils-opt
+{
+	visibility: collapse;
+}
+
+.utils-opt.o-show
+{
+	visibility: visible;
+}
+
+.utils-opt Label
+{
+	width: 140px;
+	horizontal-align: left;
+	vertical-align: center;
+	margin-left: 14px;
+	font-size: 14px;
+	letter-spacing: 1px;
+	color: #cfd4d9;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.utils-opt:hover
+{
+	background-color: rgba(70, 70, 74, 0.9);
+	cursor: pointer;
+	sound: "UIPanorama.generic_button_rollover";
+}
+
+.utils-opt:hover Label
+{
+	color: #ffffff;
+}
+
+.utils-opt:active
+{
+	background-color: rgba(90, 90, 96, 0.95);
+	sound: "UIPanorama.generic_button_press";
+}
+
+.utils-opt.utils-sel
+{
+	background-color: accent-soft;
+}
+
+.utils-opt.utils-sel Label
+{
+	color: #ffffff;
+}
+
+@define ntf-ok: #57e08a;
+@define ntf-warn: #ffcf5c;
+@define ntf-err: #ff5f6d;
+
+.utils-notify
+{
+	flow-children: right;
+	width: 340px;
+	min-height: 62px;
+	horizontal-align: right;
+	vertical-align: top;
+	margin: 60px 40px 60px 40px;
+	padding: 0px;
+	background-color: gradient( linear, 0% 0%, 0% 100%, from( rgba(24, 32, 45, 0.94) ), to( rgba(15, 21, 31, 0.96) ) );
+	border-radius: 6px;
+	box-shadow: 0px 6px 24px 0px rgba(0, 0, 0, 0.55);
+	opacity: 1;
+	transform: translateX(0px) translateY(0px);
+	transition-property: opacity, transform;
+	transition-duration: 0.22s;
+	transition-timing-function: ease-out;
+	overflow: noclip;
+	z-index: 100;
+}
+
+.utils-notify.ntf-pos-tr,
+.utils-notify.ntf-pos-br,
+.utils-notify.ntf-pos-cr { horizontal-align: right; }
+
+.utils-notify.ntf-pos-tl,
+.utils-notify.ntf-pos-bl,
+.utils-notify.ntf-pos-cl { horizontal-align: left; }
+
+.utils-notify.ntf-pos-tc,
+.utils-notify.ntf-pos-c,
+.utils-notify.ntf-pos-bc { horizontal-align: center; }
+
+.utils-notify.ntf-pos-tr,
+.utils-notify.ntf-pos-tc { vertical-align: top; }
+
+.utils-notify.ntf-pos-tl { vertical-align: top; margin-top: 300px; margin-left: 20px; }
+
+.utils-notify.ntf-pos-br,
+.utils-notify.ntf-pos-bc { vertical-align: bottom; margin-bottom: 140px; }
+
+.utils-notify.ntf-pos-bl { vertical-align: bottom; margin-bottom: 300px; margin-left: 20px; }
+
+.utils-notify.ntf-pos-cl,
+.utils-notify.ntf-pos-cr,
+.utils-notify.ntf-pos-c { vertical-align: middle; }
+
+.utils-notify.ntf-hidden { opacity: 0; }
+
+.utils-notify.ntf-pos-tr.ntf-hidden,
+.utils-notify.ntf-pos-br.ntf-hidden,
+.utils-notify.ntf-pos-cr.ntf-hidden { transform: translateX(400px); }
+
+.utils-notify.ntf-pos-tl.ntf-hidden,
+.utils-notify.ntf-pos-bl.ntf-hidden,
+.utils-notify.ntf-pos-cl.ntf-hidden { transform: translateX(-400px); }
+
+.utils-notify.ntf-pos-tc.ntf-hidden { transform: translateY(-200px); }
+
+.utils-notify.ntf-pos-bc.ntf-hidden { transform: translateY(200px); }
+
+.utils-notify.ntf-pos-c.ntf-hidden { transform: scale3d(0.85, 0.85, 1); }
+
+.ntf-bar
+{
+	width: 4px;
+	height: 100%;
+	horizontal-align: left;
+	border-top-left-radius: 6px;
+	border-bottom-left-radius: 6px;
+	background-color: accent;
+}
+
+.ntf-icon
+{
+	width: 44px;
+	height: 100%;
+	horizontal-align: left;
+	vertical-align: middle;
+	align: center center;
+}
+
+.ntf-icon-glyph
+{
+	font-size: 22px;
+	color: accent;
+	horizontal-align: center;
+	vertical-align: center;
+}
+
+.ntf-content
+{
+	flow-children: down;
+	width: fill-parent-flow(1.0);
+	vertical-align: middle;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	padding-right: 14px;
+}
+
+.ntf-title
+{
+	font-size: 15px;
+	letter-spacing: 0.5px;
+	color: #ffffff;
+	margin-bottom: 2px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.ntf-text
+{
+	font-size: 13px;
+	color: #b8c2cd;
+	text-overflow: ellipsis;
+}
+
+/* success */
+.utils-notify.ntf-success .ntf-bar { background-color: ntf-ok; }
+.utils-notify.ntf-success .ntf-icon-glyph { color: ntf-ok; }
+
+/* warning */
+.utils-notify.ntf-warning .ntf-bar { background-color: ntf-warn; }
+.utils-notify.ntf-warning .ntf-icon-glyph { color: ntf-warn; }
+
+/* error */
+.utils-notify.ntf-error .ntf-bar { background-color: ntf-err; }
+.utils-notify.ntf-error .ntf-icon-glyph { color: ntf-err; }

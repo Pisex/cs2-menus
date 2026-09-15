@@ -240,6 +240,18 @@
 		"en"		" {LIGHTRED}WARNING: You will be kicked in %i seconds due to failed Steam authentication."
 		"pt-BR"		" {LIGHTRED}AVISO: Você será kickado em %i segundos devido à falha na Autenticação Steam."
 	}
+	"MenuSettingsTitle"
+	{
+		"ru"		"Настройки"
+		"en"		"Settings"
+		"pt-BR"		"Configurações"
+	}
+	"MenuNotifyToggle"
+	{
+		"ru"		"Уведомления"
+		"en"		"Notifications"
+		"pt-BR"		"Notificações"
+	}
 	"MenuMenusTitle"
 	{
 		"ru"		"Выберите тип меню"
@@ -263,5 +275,11 @@
 		"ru"		"WASD меню"
 		"en"		"WASD Menu"
 		"pt-BR"		"WASD Menu"
+	}
+	"MenuMenusItem3"
+	{
+		"ru"		"Panorama меню"
+		"en"		"Panorama Menu"
+		"pt-BR"		"Panorama Menu"
 	}
 }

@@ -12,12 +12,14 @@
 #include "igameevents.h"
 #include "entitysystem.h"
 #include "vector.h"
+#include "entitykeyvalues.h"
 #include <deque>
 #include <functional>
 #include "utils.hpp"
 #include <utlstring.h>
-#include <KeyValues.h>
+#include <keyvalues.h>
 #include "CCSPlayerController.h"
+#include "CCSCustomHudLayout.h"
 #include "igameeventsystem.h"
 #include <networksystem/inetworkserializer.h>
 #include <networksystem/inetworkmessages.h>
@@ -30,10 +32,18 @@
 #include "include/menus.h"
 #include "include/cookies.h"
 #include <map>
+#include <unordered_map>
 #include <ctime>
 #include <chrono>
 #include <array>
 #include <thread>
+#include <netmessages.h>
+#include <usermessages.h>
+#include "customhud.pb.h"
+
+static constexpr int CS_UM_CustomHudClicked = 390;
+class CCSUsrMsg_CustomHudClicked_t
+    : public CUserMessagePB<CS_UM_CustomHudClicked, CCSUsrMsg_CustomHudClicked> {};
 
 class CPhysicsQuery;
 
@@ -73,7 +83,6 @@ protected:
 	CPlayerBitVec m_Recipients;
 };
 
-// Simple filter for when only 1 recipient is needed
 class CSingleRecipientFilter : public CRecipientFilter
 {
 public:
@@ -108,7 +117,7 @@ private:
 	const char* GetDate();
 	const char* GetLogTag();
 
-private: // Hooks
+private:
 	void ClientCommand(CPlayerSlot slot, const CCommand &args);
 	void GameFrame(bool simulating, bool bFirstTick, bool bLastTick);
 	void StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*);
@@ -116,9 +125,11 @@ private: // Hooks
 	void OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID );
 	void OnGameServerSteamAPIActivated();
 	void OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse);
-	void Hook_OnClientConnected( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress, bool bFakePlayer );
-	bool Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason );
-	void Hook_ClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid );
+	void OnClientConnected( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress, bool bFakePlayer );
+	bool OnClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason );
+	void OnClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid );
+	void OnCheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntityIndices, bool bEnablePVSBits);
+	void OnClientSvcUserMessage( CPlayerSlot slot, int um_type, uint32 size, const void *buf );
 	bool Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer);
 };
 
@@ -137,6 +148,14 @@ class MenusApi : public IMenusApi {
     void DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose, bool bReset);
 	void AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType);
 	MenuType GetMenuType(int iSlot);
+	void SetDescriptionMenu(Menu& hMenu, const char* szDescription);
+	void AddToggleMenu(Menu& hMenu, const char* sBack, const char* sText, bool bDefault, MenuToggleCallbackFunc func, int iType);
+	ItemRef AddSelectMenu(Menu& hMenu, const char* sBack, const char* sText, int iDefault, MenuSelectCallbackFunc func, int iType);
+	void AddSelectOption(ItemRef hItem, const char* sOptionBack, const char* sOptionText);
+	void SetToggleState(ItemRef hItem, bool bState);
+	bool GetToggleState(ItemRef hItem);
+	void SetSelectedOption(ItemRef hItem, int iOption);
+	int GetSelectedOption(ItemRef hItem);
 };
 
 class UtilsApi : public IUtilsApi
@@ -368,6 +387,9 @@ public:
 		
 		OnHearingClientHook[id].clear();
 
+		m_OnSettingsOpen[id].clear();
+		m_OnSettingsItem[id].clear();
+
 		ConsoleCommands[id].clear();
 		ChatCommands[id].clear();
 
@@ -433,6 +455,37 @@ public:
 
 	const char* GetVersion();
 	const char* GetServerID();
+
+	void SetTransmitState(int iEntityIndex, bool bState, std::vector<int> vecSlots);
+	void ShowNotify(int iSlot, int iType, const char* szTitle, const char* szText, float flDuration = 5.0f, int iPos = 0, const char* szChatFallback = nullptr);
+	void ShowNotifyAll(int iType, const char* szTitle, const char* szText, float flDuration = 5.0f, int iPos = 0, const char* szChatFallback = nullptr);
+
+	void OpenSettingsMenu(int iSlot) override;
+
+	void HookOnSettingsOpen(SourceMM::PluginId id, OnSettingsOpenCallback callback) override {
+		m_OnSettingsOpen[id].push_back(callback);
+	}
+
+	void HookOnSettingsItem(SourceMM::PluginId id, OnSettingsItemCallback callback) override {
+		m_OnSettingsItem[id].push_back(callback);
+	}
+
+	void SendHookOnSettingsOpen(int iSlot, Menu& hMenu) {
+		for (auto& item : m_OnSettingsOpen) {
+			for (auto& cb : item.second) {
+				if (cb) cb(iSlot, hMenu);
+			}
+		}
+	}
+
+	void SendHookOnSettingsItem(const char* szBack, const char* szFront, int iItem, int iSlot) {
+		for (auto& item : m_OnSettingsItem) {
+			for (auto& cb : item.second) {
+				if (cb) cb(szBack, szFront, iItem, iSlot);
+			}
+		}
+	}
+
 private:
     std::map<int, std::vector<CommandCallbackPre>> ChatHookPre;
     std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
@@ -448,6 +501,9 @@ private:
 	std::map<int, std::vector<OnTakeDamagePreCallback>> OnTakeDamageHookPre;
 
 	std::map<int, std::vector<OnHearingClientCallback>> OnHearingClientHook;
+
+	std::map<int, std::vector<OnSettingsOpenCallback>> m_OnSettingsOpen;
+	std::map<int, std::vector<OnSettingsItemCallback>> m_OnSettingsItem;
 
 	std::deque<std::function<void()>> m_nextFrame;
 };
@@ -567,6 +623,10 @@ public:
 		m_OnClientAuthorized[id].push_back(callback);
 	}
 
+	void ClearAllHooks(SourceMM::PluginId id) {
+		m_OnClientAuthorized[id].clear();
+	}
+
 	void SendClientAuthCallback(int iSlot, uint64 steamID) {
 		for(auto& item : m_OnClientAuthorized)
 		{
@@ -622,13 +682,44 @@ private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
 };
 
+class LayoutApi : public ILayoutApi
+{
+public:
+	void Create(int iSlot, const char* szLayoutName, const char* szLayoutPath);
+	void SetHasClass(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szClassName, bool bHasClass);
+	void SetInputCapture(int iSlot, const char* szLayoutName, bool bCapture);
+	bool GetInputCapture(int iSlot, const char* szLayoutName);
+	void SetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName, CUtlString szValue);
+	const char* GetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName);
+	void Destroy(int iSlot, const char* szLayoutName, float flDelay);
+	
+	void HookOnCustomHudClicked(SourceMM::PluginId id, OnCustomHudClicked callback) override {
+		m_OnCustomHudClicked[id].push_back(callback);
+	}
+	void SendCustomHudClickedCallback(int iSlot, const char* szLayoutName, const char* szButtonId) {
+		for(auto& item : m_OnCustomHudClicked)
+		{
+			for (auto& callback : item.second) {
+				if (callback) {
+					callback(iSlot, szLayoutName, szButtonId);
+				}
+			}
+		}
+	}
+	void ClearAllHooks(SourceMM::PluginId id) {
+		m_OnCustomHudClicked[id].clear();
+	}
+private:
+	std::map<int, std::vector<OnCustomHudClicked>> m_OnCustomHudClicked;
+};
+
 enum MsgDest : int32_t
 {
 	HUD_PRINTNOTIFY = 1,
 	HUD_PRINTCONSOLE = 2,
 	HUD_PRINTTALK = 3,
 	HUD_PRINTCENTER = 4,
-	HUD_PRINTTALK2 = 5, // Not sure what the difference between this and HUD_PRINTTALK is...
+	HUD_PRINTTALK2 = 5,
 	HUD_PRINTALERT = 6
 };
 

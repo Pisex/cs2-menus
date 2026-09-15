@@ -1,0 +1,331 @@
+<root>
+	<styles>
+		<include src="s2r://panorama/styles/csgostyles.vcss_c" />
+		<include src="s2r://panorama/styles/custom_game/ui.vcss_c" />
+	</styles>
+	<Panel class="utils-root">
+		<Panel id="utils-theme" class="utils-theme">
+			<Panel id="utils-notify" class="utils-notify ntf-success ntf-pos-tr ntf-hidden">
+				<Panel class="ntf-bar" />
+				<Panel class="ntf-icon">
+					<Label class="ntf-icon-glyph stratum-bold-tf" text="{s:ntficon}" />
+				</Panel>
+				<Panel class="ntf-content">
+					<Label id="utils-notify-title" class="ntf-title stratum-bold-tf" text="{s:ntftitle}" />
+					<Label id="utils-notify-text" class="ntf-text stratum-medium-tf" text="{s:ntftext}" />
+				</Panel>
+			</Panel>
+			<Panel id="utils-dialog" class="utils-menu utils-dismissed">
+				<Panel class="utils-bg" />
+				<Panel class="utils-bar utils-bar-left" />
+				<Panel class="utils-bar utils-bar-right" />
+				<Panel id="utils-back-anchor" class="utils-back-anchor utils-hide">
+					<Button id="utils-back" class="utils-back">
+						<Panel class="utils-back-arrow" />
+					</Button>
+				</Panel>
+				<Panel class="utils-close-anchor">
+					<Button id="utils-closeBtn" class="utils-close">
+						<Panel class="utils-x-line utils-x-a" />
+						<Panel class="utils-x-line utils-x-b" />
+					</Button>
+				</Panel>
+				<Panel class="utils-content">
+					<Label id="utils-title" class="utils-title additive stratum-bold-tf" text="{s:title}" />
+					<Label id="utils-desc" class="utils-desc stratum-medium-tf" text="{s:desc}" />
+					<Panel class="utils-divider" />
+					<Panel class="utils-buttons">
+						<Button id="utils-item-0" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-0" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-0-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-0-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+						<Button id="utils-item-1" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-1" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-1-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-1-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+						<Button id="utils-item-2" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-2" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-2-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-2-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+						<Button id="utils-item-3" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-3" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-3-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-3-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+						<Button id="utils-item-4" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-4" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-4-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-4-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+						<Button id="utils-item-5" class="utils-item k-empty">
+							<Label class="utils-item-label stratum-medium-tf" text="{s:label}" />
+							<Label class="utils-item-value stratum-medium-tf" text="{s:value}" />
+							<Panel class="utils-item-arrow" />
+							<Panel class="utils-switch">
+								<Panel class="utils-switch-knob" />
+							</Panel>
+							<Panel class="utils-empty-deco">
+								<Panel class="utils-empty utils-empty-0" />
+								<Panel class="utils-empty utils-empty-1" />
+								<Panel class="utils-empty utils-empty-2" />
+								<Panel class="utils-empty utils-empty-3" />
+								<Panel class="utils-empty utils-empty-4" />
+								<Panel class="utils-empty utils-empty-5" />
+								<Panel class="utils-empty utils-empty-6" />
+								<Panel class="utils-empty utils-empty-7" />
+								<Panel class="utils-empty utils-empty-8" />
+								<Panel class="utils-empty utils-empty-9" />
+								<Panel class="utils-empty utils-empty-10" />
+							</Panel>
+							<Panel id="utils-menu-5" class="utils-select-menu utils-imenu">
+								<Button id="utils-opt-5-0" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-1" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-2" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-3" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-4" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-5" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-6" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+								<Button id="utils-opt-5-7" class="utils-opt">
+									<Label class="stratum-medium-tf" text="{s:value}" />
+								</Button>
+							</Panel>
+						</Button>
+					</Panel>
+					<Panel class="utils-divider" />
+					<Panel id="utils-pagination" class="utils-pagination">
+						<Button id="utils-prev" class="utils-pagination-btn utils-prev" />
+						<Label id="utils-page" class="utils-pagination-label stratum-medium-tf" text="{s:page}" />
+						<Button id="utils-next" class="utils-pagination-btn utils-next" />
+					</Panel>
+				</Panel>
+			</Panel>
+		</Panel>
+	</Panel>
+</root>

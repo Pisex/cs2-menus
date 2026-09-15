@@ -10,7 +10,13 @@ for sdk_target in MMSPlugin.sdk_targets:
   sdk = sdk_target.sdk
   cxx = sdk_target.cxx
     
-  cxx.cxxflags += ['-Wno-invalid-offsetof']
+  cxx.cxxflags += ['-Wno-invalid-offsetof', '-Wno-reorder-ctor']
+  if cxx.target.platform == 'linux':
+    cxx.defines += [
+      'bswap_16=__builtin_bswap16',
+      'bswap_32=__builtin_bswap32',
+      'bswap_64=__builtin_bswap64',
+    ]
   binary = MMSPlugin.HL2Library(builder, cxx, MMSPlugin.plugin_name, sdk)
 
   binary.compiler.cxxincludes += [
@@ -31,14 +37,23 @@ for sdk_target in MMSPlugin.sdk_targets:
       os.path.join(builder.sourcePath, 'funchook', 'lib', 'distorm.lib'),
     ]
 
-  binary.custom = [builder.tools.Protoc(protoc = sdk_target.protoc, sources = [
-    os.path.join(sdk['path'], 'game', 'shared', 'usermessages.proto'),
-    os.path.join(sdk['path'], 'common', 'network_connection.proto'),
-    os.path.join(sdk['path'], 'common', 'networkbasetypes.proto'),
-    os.path.join(sdk['path'], 'common', 'engine_gcmessages.proto'),
-    os.path.join(sdk['path'], 'game', 'shared', 'usercmd.proto'),
-    os.path.join(sdk['path'], 'game', 'shared', 'gameevents.proto'),
-  ])]
+  proto_dir = os.path.join(sdk['path'], 'thirdparty', 'game_protobufs', 'csgo')
+  proto_sources = [
+    os.path.join(proto_dir, f) for f in [
+      'networksystem_protomessages.proto',
+      'valveextensions.proto',
+      'network_connection.proto',
+      'networkbasetypes.proto',
+      'engine_gcmessages.proto',
+      'netmessages.proto',
+      'gameevents.proto',
+      'usercmd.proto',
+      'usermessages.proto',
+      'source2_steam_stats.proto',
+    ]
+  ]
+  proto_sources.append(os.path.join(builder.sourcePath, 'customhud.proto'))
+  binary.custom = [builder.tools.Protoc(protoc = sdk_target.protoc, sources = proto_sources)]
 
   binary.sources += [
     'utils.cpp',

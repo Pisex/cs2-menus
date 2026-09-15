@@ -62,6 +62,9 @@ IUtilsApi* g_pUtilsCore = nullptr;
 PlayersApi* g_pPlayersApi = nullptr;
 IPlayersApi* g_pPlayersCore = nullptr;
 
+LayoutApi* g_pLayoutApi = nullptr;
+ILayoutApi* g_pLayoutCore = nullptr;
+
 ICookiesApi* g_pCookies = nullptr;
 
 char szLanguage[16];
@@ -73,13 +76,54 @@ const char* g_szMenuURL;
 bool g_bMenuFlashFix;
 bool g_bAccessUserChangeType;
 bool g_bStopingUser;
+bool g_bPanoramaMenu;
 int g_iTimeoutMenu;
 int g_iSoundType;
 std::string g_szServerID;
+bool g_bAllowDisableNotify;
+bool g_bNotifyDisabledDefault;
+bool g_bNotifyDisabled[64];
+
+std::string g_szSettingsCommand;
 
 std::map<std::string, std::string> g_mapSounds;
+std::unordered_map<std::string, CHandle<CCSCustomHudLayout>> g_mapHudLayouts[64];
+
+std::unordered_map<const Menu*, std::string> g_mapMenuDesc;
+std::string g_szMenuDesc[64];
+
+struct ItemExtra
+{
+	ItemKind iKind = ItemKind::BUTTON;
+	bool bToggled = false;
+	MenuToggleCallbackFunc hToggleFunc = nullptr;
+	std::vector<SelectOption> vOptions;
+	int iSelected = 0;
+	bool bOpened = false;
+	MenuSelectCallbackFunc hSelectFunc = nullptr;
+};
+std::unordered_map<const Menu*, std::vector<ItemExtra>> g_mapItemExtra;
+std::vector<ItemExtra> g_vItemExtra[64];
+
+static ItemExtra& UTIL_PushItemExtra(Menu& hMenu)
+{
+	auto& ex = g_mapItemExtra[&hMenu];
+	ex.resize(hMenu.hItems.size());
+	ex.back() = ItemExtra{};
+	return ex.back();
+}
+
+static ItemExtra* UTIL_ResolveItemExtra(const ItemRef& ref)
+{
+	if (!ref.pMenu || ref.iIndex < 0) return nullptr;
+	auto it = g_mapItemExtra.find(ref.pMenu);
+	if (it == g_mapItemExtra.end()) return nullptr;
+	if (ref.iIndex >= (int)it->second.size()) return nullptr;
+	return &it->second[ref.iIndex];
+}
 
 std::vector<std::string> g_vCommandEater;
+std::map<int, std::vector<int>> g_mapTransmitState;
 
 int g_iOnTakeDamageAliveId = -1;
 
@@ -93,8 +137,9 @@ SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayer
 SH_DECL_HOOK4_void(IServerGameClients, ClientPutInServer, SH_NOATTRIB, 0, CPlayerSlot, char const *, int, uint64);
 SH_DECL_HOOK6_void(IServerGameClients, OnClientConnected, SH_NOATTRIB, 0, CPlayerSlot, const char*, uint64, const char *, const char *, bool);
 SH_DECL_HOOK6(IServerGameClients, ClientConnect, SH_NOATTRIB, 0, bool, CPlayerSlot, const char*, uint64, const char *, bool, CBufferString *);
-
+SH_DECL_HOOK8_void(ISource2GameEntities, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo **, int, CBitVec<16384> &, CBitVec<16384> &, const Entity2Networkable_t **, const uint16 *, int, bool);
 SH_DECL_MANUALHOOK1(OnTakeDamage_Alive, 0, 0, 0, bool, CTakeDamageInfoContainer *);
+SH_DECL_HOOK4_void(IServerGameClients, ClientSvcUserMessage, SH_NOATTRIB, 0, CPlayerSlot, int, uint32, const void *);
 
 struct SndOpEventGuid_t;
 void (*UTIL_Remove)(CEntityInstance*) = nullptr;
@@ -111,8 +156,12 @@ IGameEventListener2* (*UTIL_GetLegacyGameEventListener)(CPlayerSlot slot) = null
 CBaseEntity* (*UTIL_CreateEntity)(const char *pClassName, CEntityIndex iForceEdictIndex) = nullptr;
 void (*UTIL_SetMoveType)(CBaseEntity *pThis, MoveType_t nMoveType, MoveCollide_t nMoveCollide) = nullptr;
 SndOpEventGuid_t (*UTIL_EmitSoundFilter)(uint8_t unk1[32], IRecipientFilter& filter, CEntityIndex ent, const EmitSound_t& params);
-void (*UTIL_AcceptInput)(CEntityInstance* pThis, const char* pInputName, CEntityInstance* pActivator, CEntityInstance* pCaller, const variant_t& pValue, int nOutputID, void* pUnk1) = nullptr;
+void (*UTIL_AcceptInput)(CEntityInstance* pThis, const char* pInputName, CEntityInstance* pActivator, CEntityInstance* pCaller, variant_t& pValue) = nullptr;
 bool (*UTIL_TraceShape)(CPhysicsQuery*, const Ray_t* ray, const Vector* start, const Vector* end, CTraceFilter* filter, trace_t* trace) = nullptr;
+
+// void* (*UTIL_SetHasClass)(CCSCustomHudLayout* layout, CUtlString panelId, CUtlString className, bool bHasClass) = nullptr;
+// void* (*UTIL_SetInputCaptureEnabled)(CCSCustomHudLayout* layout, int iSlot, bool enable) = nullptr;
+// void* (*UTIL_SetDialogVariableStringForPlayer)(CCSCustomHudLayout* layout, int iSlot, CUtlString panelId, CUtlString variableName, CUtlString value) = nullptr;
 
 // void (*UTIL_ClientPrint)(CBasePlayerController*, int, const char *, const char *, const char *, const char *, const char *) = nullptr;
 // void (*UTIL_ClientPrintAll)(int, const char *, const char *, const char *, const char *, const char *) = nullptr;
@@ -124,6 +173,10 @@ funchook_t* m_SayTeamHook;
 funchook_t* m_TakeDamageHook;
 funchook_t* m_IsHearingClientHook;
 
+static void UTIL_HandleLayoutClick(int iSlot, const char* szLayoutName, const char* szButton);
+static void UTIL_EnsureLayout(int iSlot);
+static void UTIL_DestroyLayout(int iSlot);
+std::vector<std::string> SplitStringBySpace(const std::string& input);
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
 }
@@ -204,12 +257,12 @@ std::string Colorizer(std::string str)
 
 void* Menus::OnMetamodQuery(const char* iface, int* ret)
 {
-	if (!strcmp(iface, Menus_INTERFACE))
+	if (!strcmp(iface, MENUS_INTERFACE))
 	{
 		*ret = META_IFACE_OK;
 		return g_pMenusCore;
 	}
-	if (!strcmp(iface, Utils_INTERFACE))
+	if (!strcmp(iface, UTILS_INTERFACE))
 	{
 		*ret = META_IFACE_OK;
 		return g_pUtilsCore;
@@ -218,6 +271,11 @@ void* Menus::OnMetamodQuery(const char* iface, int* ret)
 	{
 		*ret = META_IFACE_OK;
 		return g_pPlayersCore;
+	}
+	if (!strcmp(iface, LAYOUT_INTERFACE))
+	{
+		*ret = META_IFACE_OK;
+		return g_pLayoutCore;
 	}
 
 	*ret = META_IFACE_FAILED;
@@ -289,6 +347,25 @@ bool FASTCALL IsHearingClient(void* serverClient, int index)
 	return g_pUtilsApi->SendHookOnHearingClient(index)?UTIL_IsHearingClient(serverClient, index):false;
 }
 
+void UtilsApi::SetTransmitState(int iEntityIndex, bool bState, std::vector<int> vecSlots)
+{
+	if(vecSlots.empty()) {
+		for (int i = 0; i < 64; i++)
+		{
+			if(bState) g_mapTransmitState[iEntityIndex].erase(std::remove(g_mapTransmitState[iEntityIndex].begin(), g_mapTransmitState[iEntityIndex].end(), i), g_mapTransmitState[iEntityIndex].end());
+			else g_mapTransmitState[iEntityIndex].push_back(i);
+		}
+	} else {
+		for (int i = 0; i < vecSlots.size(); i++)
+		{
+			if(bState) g_mapTransmitState[iEntityIndex].erase(std::remove(g_mapTransmitState[iEntityIndex].begin(), g_mapTransmitState[iEntityIndex].end(), vecSlots[i]), g_mapTransmitState[iEntityIndex].end());
+			else g_mapTransmitState[iEntityIndex].push_back(vecSlots[i]);
+		}
+	}
+}
+
+static int UTIL_SanitizeMenuType(int iType);
+
 void Menus::AllPluginsLoaded() {
 	char error[64];
 	int ret;
@@ -310,9 +387,20 @@ void Menus::AllPluginsLoaded() {
 	}
 	g_pCookies->HookClientCookieLoaded(g_PLID, [](int iSlot) {
 		const char* szMenuType = g_pCookies->GetCookie(iSlot, "Utils.MenuType");
-		if (szMenuType && szMenuType[0]) g_iMenuType[iSlot] = atoi(szMenuType);
-		else g_iMenuType[iSlot] = g_iMenuTypeDefault;
+		if (szMenuType && szMenuType[0]) g_iMenuType[iSlot] = UTIL_SanitizeMenuType(atoi(szMenuType));
+		else g_iMenuType[iSlot] = UTIL_SanitizeMenuType(g_iMenuTypeDefault);
+
+		const char* szNotifyDisabled = g_pCookies->GetCookie(iSlot, "Utils.NotifyDisabled");
+		if (szNotifyDisabled && szNotifyDisabled[0]) g_bNotifyDisabled[iSlot] = atoi(szNotifyDisabled) != 0;
+		else g_bNotifyDisabled[iSlot] = g_bNotifyDisabledDefault;
 	});
+}
+
+static int UTIL_SanitizeMenuType(int iType)
+{
+	if(!g_bPanoramaMenu && iType == 3)
+		return (g_iMenuTypeDefault == 3) ? 0 : g_iMenuTypeDefault;
+	return iType;
 }
 
 int GetClientCookieMenuType(int iSlot)
@@ -324,7 +412,19 @@ int GetClientCookieMenuType(int iSlot)
 	g_SMAPI->Format(szSteamID, sizeof(szSteamID), "%llu", m_steamID);
 	KeyValues *hData = g_hKVData->FindKey(szSteamID, false);
 	if(!hData) return g_iMenuTypeDefault;
-	return hData->GetInt("Utils.MenuType", g_iMenuTypeDefault);
+	return UTIL_SanitizeMenuType(hData->GetInt("Utils.MenuType", g_iMenuTypeDefault));
+}
+
+bool GetClientCookieNotifyDisabled(int iSlot)
+{
+	if(g_pPlayersApi->IsFakeClient(iSlot)) return g_bNotifyDisabledDefault;
+	uint64 m_steamID = g_pPlayersApi->GetSteamID64(iSlot);
+	if(m_steamID == 0) return g_bNotifyDisabledDefault;
+	char szSteamID[64];
+	g_SMAPI->Format(szSteamID, sizeof(szSteamID), "%llu", m_steamID);
+	KeyValues *hData = g_hKVData->FindKey(szSteamID, false);
+	if(!hData) return g_bNotifyDisabledDefault;
+	return hData->GetInt("Utils.NotifyDisabled", g_bNotifyDisabledDefault ? 1 : 0) != 0;
 }
 
 bool SetClientCookie(int iSlot, const char* sCookieName, const char* sData)
@@ -347,10 +447,14 @@ void SettingMenu(int iSlot)
 	g_pMenusCore->AddItemMenu(hMenu, "0", g_vecPhrases["MenuMenusItem0"].c_str(), g_iMenuType[iSlot] == 0 ? ITEM_DISABLED : ITEM_DEFAULT);
 	g_pMenusCore->AddItemMenu(hMenu, "1", g_vecPhrases["MenuMenusItem1"].c_str(), g_iMenuType[iSlot] == 1 ? ITEM_DISABLED : ITEM_DEFAULT);
 	g_pMenusCore->AddItemMenu(hMenu, "2", g_vecPhrases["MenuMenusItem2"].c_str(), g_iMenuType[iSlot] == 2 ? ITEM_DISABLED : ITEM_DEFAULT);
+
+	if(g_bPanoramaMenu)
+		g_pMenusCore->AddItemMenu(hMenu, "3", g_vecPhrases["MenuMenusItem3"].c_str(), g_iMenuType[iSlot] == 3 ? ITEM_DISABLED : ITEM_DEFAULT);
 	g_pMenusCore->SetExitMenu(hMenu, true);
 	g_pMenusCore->SetCallback(hMenu, [](const char* szBack, const char* szFront, int iItem, int iSlot){
 		if(iItem < 7) {
 			int iType = std::atoi(szBack);
+			iType = UTIL_SanitizeMenuType(iType);
 			g_iMenuType[iSlot] = iType;
 			if(g_pCookies) g_pCookies->SetCookie(iSlot, "Utils.MenuType", std::to_string(iType).c_str());
 			else SetClientCookie(iSlot, "Utils.MenuType", std::to_string(iType).c_str());
@@ -358,6 +462,90 @@ void SettingMenu(int iSlot)
 		}
 	});
 	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, true, true);
+}
+
+void UtilsApi::OpenSettingsMenu(int iSlot)
+{
+	Menu hMenu;
+	hMenu.szTitle = g_vecPhrases["MenuSettingsTitle"];
+
+	if (g_bAccessUserChangeType)
+		g_pMenusCore->AddItemMenu(hMenu, "settings_menu_type", g_vecPhrases["MenuMenusTitle"].c_str(), ITEM_DEFAULT);
+
+	if (g_bAllowDisableNotify) {
+		g_pMenusCore->AddToggleMenu(hMenu, "settings_notify_toggle",
+			g_vecPhrases["MenuNotifyToggle"].c_str(),
+			g_bNotifyDisabled[iSlot],
+			[](const char* szBack, bool bState, int iItem, int iSlot) {
+				g_bNotifyDisabled[iSlot] = bState;
+				if (g_pCookies) g_pCookies->SetCookie(iSlot, "Utils.NotifyDisabled", bState ? "1" : "0");
+				else SetClientCookie(iSlot, "Utils.NotifyDisabled", bState ? "1" : "0");
+			});
+	}
+
+	SendHookOnSettingsOpen(iSlot, hMenu);
+
+	g_pMenusCore->SetExitMenu(hMenu, true);
+	g_pMenusCore->SetCallback(hMenu, [](const char* szBack, const char* szFront, int iItem, int iSlot) {
+		if (strcmp(szBack, "settings_menu_type") == 0) {
+			SettingMenu(iSlot);
+			return;
+		}
+		if (strcmp(szBack, "settings_notify_toggle") == 0) {
+			g_bNotifyDisabled[iSlot] = !g_bNotifyDisabled[iSlot];
+			if (g_pCookies) g_pCookies->SetCookie(iSlot, "Utils.NotifyDisabled", g_bNotifyDisabled[iSlot] ? "1" : "0");
+			else SetClientCookie(iSlot, "Utils.NotifyDisabled", g_bNotifyDisabled[iSlot] ? "1" : "0");
+			g_pUtilsApi->OpenSettingsMenu(iSlot);
+			return;
+		}
+		g_pUtilsApi->SendHookOnSettingsItem(szBack, szFront, iItem, iSlot);
+	});
+	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, true, true);
+}
+
+void Menus::OnCheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntityIndices, bool bEnablePVSBits)
+{
+	if (!g_pEntitySystem) return;
+
+	for (int i = 0; i < nInfoCount; i++)
+	{
+		auto &pInfo = pInfoInfoList[i];
+		int iPlayerSlot = pInfo->m_nPlayerSlot;
+
+		CCSPlayerController* pSelfController = CCSPlayerController::FromSlot(iPlayerSlot);
+		if (!pSelfController) continue;
+
+		if(g_mapTransmitState.size() > 0)
+		{
+			for (auto& [iEntityIndex, vecSlots] : g_mapTransmitState)
+			{
+				if(vecSlots.size() > 0)
+				{
+					if(std::find(vecSlots.begin(), vecSlots.end(), iPlayerSlot) != vecSlots.end())
+					{
+						pInfo->m_pTransmitEntity->Clear(iEntityIndex);
+					}
+				}
+			}
+		}
+	}
+}
+
+void Menus::OnClientSvcUserMessage( CPlayerSlot slot, int um_type, uint32 size, const void *buf )
+{
+	if (um_type != CS_UM_CustomHudClicked)
+		return;
+
+	CCSUsrMsg_CustomHudClicked msg;
+	if (!msg.ParseFromArray(buf, size))
+		return;
+
+	const int iSlot = slot.Get();
+	const std::string sButtonId = msg.button_id();
+	const char* szButton = sButtonId.c_str();
+
+	UTIL_HandleLayoutClick(iSlot, "utils-dialog", szButton);
+	g_pLayoutApi->SendCustomHudClickedCallback(iSlot, "utils-dialog", szButton);
 }
 
 bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
@@ -373,6 +561,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	GET_V_IFACE_ANY(GetEngineFactory, g_gameEventSystem, IGameEventSystem, GAMEEVENTSYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetEngineFactory, g_pNetworkMessages, INetworkMessages, NETWORKMESSAGES_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameClients, IServerGameClients, SOURCE2GAMECLIENTS_INTERFACE_VERSION);
+	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameEntities, ISource2GameEntities, SOURCE2GAMEENTITIES_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceServiceServer, IGameResourceService, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
 
@@ -382,9 +571,11 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_ADD_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &Menus::OnGameServerSteamAPIActivated), false);
 	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientDisconnect), true);
-	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
-	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
-	SH_ADD_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
+	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientPutInServer), true);
+	SH_ADD_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientConnected), false);
+	SH_ADD_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientConnect), false );	
+	SH_ADD_HOOK(ISource2GameEntities, CheckTransmit, g_pSource2GameEntities, SH_MEMBER(this, &Menus::OnCheckTransmit), true);
+	SH_ADD_HOOK(IServerGameClients, ClientSvcUserMessage, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientSvcUserMessage), false);
 	
 	ConVar_Register(FCVAR_RELEASE | FCVAR_CLIENT_CAN_EXECUTE | FCVAR_GAMEDLL);
 
@@ -397,6 +588,7 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	//0 - в чат
 	//1 - также как в чат но в центр
 	//2 - выбор через WASD 
+	//3 - panorama menu
 
 	g_pMenusApi = new MenusApi();
 	g_pMenusCore = g_pMenusApi;
@@ -406,6 +598,9 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 	g_pPlayersApi = new PlayersApi();
 	g_pPlayersCore = g_pPlayersApi;
+
+	g_pLayoutApi = new LayoutApi();
+	g_pLayoutCore = g_pLayoutApi;
 
 	{
 		KeyValues* g_kvCore = new KeyValues("Core");
@@ -426,9 +621,13 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_iDelayAuthFailKick = g_kvCore->GetInt("delay_auth_fail_kick", 30);
 		g_bAccessUserChangeType = g_kvCore->GetBool("AccessUserChangeType", true);
 		g_bStopingUser = g_kvCore->GetBool("StopingUser", false);
+		g_bPanoramaMenu = g_kvCore->GetBool("PanoramaMenu", true);
 		g_iTimeoutMenu = g_kvCore->GetInt("TimeoutInputMenu", 160);
 		g_iSoundType = g_kvCore->GetInt("sound_type", 0);
 		g_szServerID = g_kvCore->GetString("server_id", "0");
+		g_szSettingsCommand = g_kvCore->GetString("SettingsCommand", "!settings");
+		g_bAllowDisableNotify = g_kvCore->GetBool("AllowDisableNotify", true);
+		g_bNotifyDisabledDefault = g_kvCore->GetBool("NotifyDisabledDefault", false);
 
 		g_mapSounds.clear();
 		const char* szBackSound = g_kvCore->GetString("sound_back", "");
@@ -463,6 +662,35 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 				return false;
 			});
 		}
+
+		g_pUtilsApi->RegCommand(g_PLID, {"mm_settings"}, {g_szSettingsCommand}, [](int iSlot, const char* szContent){
+			if(g_pPlayersApi->IsFakeClient(iSlot)) return false;
+			g_pUtilsApi->OpenSettingsMenu(iSlot);
+			return false;
+		});
+
+		// g_pUtilsApi->RegCommand(g_PLID, {"notifytest"}, {"notifytest"}, [](int iSlot, const char* szContent){
+		// 	if(g_pPlayersApi->IsFakeClient(iSlot)) return true;
+
+		// 	auto tokens = SplitStringBySpace(szContent ? szContent : "");
+		// 	int iType = (tokens.size() > 1) ? atoi(tokens[1].c_str()) : 0;
+		// 	int iPos  = (tokens.size() > 2) ? atoi(tokens[2].c_str()) : 0;
+		// 	float flDur = (tokens.size() > 3) ? (float)atof(tokens[3].c_str()) : 5.0f;
+		// 	bool bAll = (tokens.size() > 4) ? (atoi(tokens[4].c_str()) != 0) : false;
+
+		// 	static const char* const s_szTitles[] = { "Успех", "Внимание", "Ошибка" };
+		// 	int iT = (iType < 0 || iType > 2) ? 0 : iType;
+		// 	char szText[128];
+		// 	g_SMAPI->Format(szText, sizeof(szText), "Тест тоста: type=%d pos=%d dur=%.1f", iType, iPos, flDur);
+		// 	char szChat[160];
+		// 	g_SMAPI->Format(szChat, sizeof(szChat), " \x04[Notify]\x01 %s: %s", s_szTitles[iT], szText);
+
+		// 	if(bAll)
+		// 		g_pUtilsApi->ShowNotifyAll(iType, s_szTitles[iT], szText, flDur, iPos, szChat);
+		// 	else
+		// 		g_pUtilsApi->ShowNotify(iSlot, iType, s_szTitles[iT], szText, flDur, iPos, szChat);
+		// 	return true;
+		// });
 	}
 
 	g_pUtilsApi->LoadTranslations("menus.phrases");
@@ -639,6 +867,33 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		}
 	}
 
+	// const char* pszSetHasClass = g_kvSigs->GetString("CustomHudLayout::SetHasClass");
+	// if(pszSetHasClass && pszSetHasClass[0]) {
+	// 	UTIL_SetHasClass = libserver.FindPattern(pszSetHasClass).RCast< decltype(UTIL_SetHasClass) >();
+	// 	if (!UTIL_SetHasClass)
+	// 	{
+	// 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_SetHasClass", g_PLAPI->GetLogTag());
+	// 	}
+	// }
+
+	// const char* pszSetInputCaptureEnabled = g_kvSigs->GetString("CustomHudLayout::SetInputCaptureEnabled");
+	// if(pszSetInputCaptureEnabled && pszSetInputCaptureEnabled[0]) {
+	// 	UTIL_SetInputCaptureEnabled = libserver.FindPattern(pszSetInputCaptureEnabled).RCast< decltype(UTIL_SetInputCaptureEnabled) >();
+	// 	if (!UTIL_SetInputCaptureEnabled)
+	// 	{
+	// 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_SetInputCaptureEnabled", g_PLAPI->GetLogTag());
+	// 	}
+	// }
+
+	// const char* pszSetDialogVariableStringForPlayer = g_kvSigs->GetString("CustomHudLayout::SetDialogVariableStringForPlayer");
+	// if(pszSetDialogVariableStringForPlayer && pszSetDialogVariableStringForPlayer[0]) {
+	// 	UTIL_SetDialogVariableStringForPlayer = libserver.FindPattern(pszSetDialogVariableStringForPlayer).RCast< decltype(UTIL_SetDialogVariableStringForPlayer) >();
+	// 	if (!UTIL_SetDialogVariableStringForPlayer)
+	// 	{
+	// 		g_pUtilsApi->ErrorLog("[%s] Failed to find function to get UTIL_SetDialogVariableStringForPlayer", g_PLAPI->GetLogTag());
+	// 	}
+	// }
+
 	g_iCommitSuicide = g_kvSigs->GetInt("CommitSuicide", 0);
 	g_iChangeTeam = g_kvSigs->GetInt("ChangeTeam", 0);
 	g_iCollisionRulesChanged = g_kvSigs->GetInt("CollisionRulesChanged", 0);
@@ -704,39 +959,39 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	});
 
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_1"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 1)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 1)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_2"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 2)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 2)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_3"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 3)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 3)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_4"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 4)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 4)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_5"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 5)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 5)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_6"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 6)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 6)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_7"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 7)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 7)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_8"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 8)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 8)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_9"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] != 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
+		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
 		return false;
 	});
 
@@ -745,6 +1000,8 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 
 void Menus::OnPluginUnload(PluginId id) {
 	g_pUtilsApi->ClearAllHooks(id);
+	g_pPlayersApi->ClearAllHooks(id);
+	g_pLayoutApi->ClearAllHooks(id);
 }
 
 bool Menus::Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer)
@@ -769,9 +1026,9 @@ bool Menus::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &Menus::StartupServer), true);
 	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &Menus::OnGameServerSteamAPIActivated), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientDisconnect), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientPutInServer), true);
-	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_OnClientConnected), false);
-	SH_REMOVE_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::Hook_ClientConnect), false );
+	SH_REMOVE_HOOK(IServerGameClients, ClientPutInServer, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientPutInServer), true);
+	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientConnected), false);
+	SH_REMOVE_HOOK(IServerGameClients, ClientConnect, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientConnect), false );
 
 	if(g_iOnTakeDamageAliveId) SH_REMOVE_HOOK_ID(g_iOnTakeDamageAliveId);
 	if(m_SayHook) funchook_destroy(m_SayHook);
@@ -788,13 +1045,13 @@ void Menus::OnGameServerSteamAPIActivated()
 	m_CallbackValidateAuthTicketResponse.Register(this, &Menus::OnValidateAuthTicketHook);
 }
 
-void Menus::Hook_OnClientConnected(CPlayerSlot slot, const char* pszName, uint64 xuid, const char* pszNetworkID, const char* pszAddress, bool bFakePlayer)
+void Menus::OnClientConnected(CPlayerSlot slot, const char* pszName, uint64 xuid, const char* pszNetworkID, const char* pszAddress, bool bFakePlayer)
 {
 	if(bFakePlayer)
 		m_Players[slot.Get()] = new Player(slot.Get(), true);
 }
 
-bool Menus::Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason )
+bool Menus::OnClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason )
 {
 	Player *pPlayer = new Player(slot.Get());
 	pPlayer->SetUnauthenticatedSteamId(new CSteamID(xuid));
@@ -815,9 +1072,13 @@ bool Menus::Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xu
 	RETURN_META_VALUE(MRES_IGNORED, true);
 }
 
-void Menus::Hook_ClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid )
+void Menus::OnClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid )
 {
 	m_Players[slot.Get()]->SetInGame(true);
+
+	int iSlot = slot.Get();
+	if(iSlot >= 0 && iSlot < 64 && !g_pPlayersApi->IsFakeClient(iSlot))
+		UTIL_EnsureLayout(iSlot);
 }
 
 void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
@@ -839,6 +1100,7 @@ void Menus::OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse)
 
 				if(!g_pCookies) {
 					g_iMenuType[i] = GetClientCookieMenuType(i);
+					g_bNotifyDisabled[i] = GetClientCookieNotifyDisabled(i);
 				}
 				return;
 			}
@@ -929,7 +1191,6 @@ void Menus::GameFrame(bool simulating, bool bFirstTick, bool bLastTick)
 		if (timer->m_flLastExecute == -1)
 			timer->m_flLastExecute = g_flUniversalTime;
 
-		// Timer execute 
 		if (timer->m_flLastExecute + timer->m_flInterval <= g_flUniversalTime)
 		{
 			if (!timer->Execute())
@@ -995,7 +1256,7 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 			{
 				if (containsOnlyDigits(tokens[0]))
 				{
-					if (g_iMenuType[iSlot] != 2)
+					if (g_iMenuType[iSlot] < 2)
 					{
 						int iButton = atoi(tokens[0].c_str());
 						if (CheckActionMenu(iSlot, pController, iButton))
@@ -1033,19 +1294,29 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 	}
 }
 
+CGlobalVars* getGlobalVars()
+{
+    INetworkGameServer* server = g_pNetworkServerService->GetIGameServer();
+    if (!server) return nullptr;
+    return g_pNetworkServerService->GetIGameServer()->GetGlobals();
+}
+
 void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
 {
 	for(int i = 0; i < 64; i++)
 	{
-		g_MenuPlayer[i].clear();
-		g_TextMenuPlayer[i] = "";
-		g_iMenuItem[i] = 1;
+		g_pMenusCore->ClosePlayerMenu(i);
+		for (auto& [panelId, layout] : g_mapHudLayouts[i])
+		{
+			if(layout) g_mapTransmitState[layout->entindex()].clear();
+		}
+		g_mapHudLayouts[i].clear();
 	}
 	g_Offsets.clear();
 	g_ChainOffsets.clear();
 	g_pGameRules = nullptr;
 	g_pEntitySystem = GameEntitySystem();
-	gpGlobals = engine->GetServerGlobals();
+	gpGlobals = getGlobalVars();
 	if(g_bHasTicked) {
 		g_pUtilsApi->SendHookMapEnd();
 	} else {
@@ -1061,6 +1332,8 @@ void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason re
 {
 	int iSlot = slot.Get();
 	g_pMenusCore->ClosePlayerMenu(iSlot);
+	if(iSlot >= 0 && iSlot < 64)
+		UTIL_DestroyLayout(iSlot);
 	if (iSlot < 0 || iSlot >= 64 || !m_Players[iSlot]) return;
 	delete m_Players[iSlot];
 	m_Players[iSlot] = nullptr;
@@ -1071,6 +1344,8 @@ void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason re
 	g_MenuPlayer[iSlot].clear();
 	g_TextMenuPlayer[iSlot] = "";
 	g_iMenuItem[iSlot] = 1;
+	g_szMenuDesc[iSlot].clear();
+	g_vItemExtra[iSlot].clear();
 }
 
 bool MenusApi::IsMenuOpen(int iSlot) {
@@ -1079,6 +1354,13 @@ bool MenusApi::IsMenuOpen(int iSlot) {
 
 void MenusApi::SetTitleMenu(Menu& hMenu, const char* szTitle) {
 	hMenu.szTitle = std::string(szTitle);
+}
+
+void MenusApi::SetDescriptionMenu(Menu& hMenu, const char* szDescription) {
+	if(szDescription && szDescription[0])
+		g_mapMenuDesc[&hMenu] = szDescription;
+	else
+		g_mapMenuDesc.erase(&hMenu);
 }
 
 void MenusApi::SetBackMenu(Menu& hMenu, bool bBack) {
@@ -1340,6 +1622,309 @@ MenuType MenusApi::GetMenuType(int iSlot)
     return static_cast<MenuType>(g_iMenuType[iSlot]);
 }
 
+static const char* const g_szLayoutName = "utils-dialog";
+static const char* const g_szItemKinds[] = { "k-empty", "k-value", "k-submenu", "k-toggle", "k-select" };
+static const int g_iItemsPerPage = 6;
+static const int g_iMaxOptions = 8;
+
+static int g_iNotifyGen[64] = {0};
+
+static void UTIL_SetLayoutItemKind(int iSlot, const char* szItemId, const char* szKind)
+{
+	for(const char* k : g_szItemKinds)
+	{
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItemId, k,
+			(strcmp(k, szKind) == 0) ? true : false);
+	}
+}
+
+static void UTIL_RenderLayoutItem(int iSlot, Menu& hMenu, MenuPlayer& hMenuPlayer, int i)
+{
+	char szItem[64];
+	g_SMAPI->Format(szItem, sizeof(szItem), "utils-item-%i", i);
+	int iIndex = hMenuPlayer.iList * g_iItemsPerPage + i;
+
+	if(iIndex >= (int)hMenu.hItems.size())
+	{
+		UTIL_SetLayoutItemKind(iSlot, szItem, "k-empty");
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-disabled", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-on", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-open", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-up", false);
+		g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, szItem, "label", "");
+		g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, szItem, "value", "");
+		return;
+	}
+
+	const auto& item = hMenu.hItems[iIndex];
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, szItem, "label", item.sText.c_str());
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-disabled",
+		item.iType == 2 ? true : false);
+
+	static ItemExtra kEmptyExtra;
+	const ItemExtra& ex = (iIndex < (int)g_vItemExtra[iSlot].size())
+		? g_vItemExtra[iSlot][iIndex] : kEmptyExtra;
+
+	if(ex.iKind == ItemKind::TOGGLE)
+	{
+		UTIL_SetLayoutItemKind(iSlot, szItem, "k-toggle");
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-on",
+			ex.bToggled ? true : false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-open", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-up", false);
+	}
+	else if(ex.iKind == ItemKind::SELECT)
+	{
+		UTIL_SetLayoutItemKind(iSlot, szItem, "k-select");
+		int iSel = ex.iSelected;
+		if(iSel < 0 || iSel >= (int)ex.vOptions.size()) iSel = 0;
+		const char* szValue = ex.vOptions.empty() ? "" : ex.vOptions[iSel].sText.c_str();
+		g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, szItem, "value", szValue);
+		char szOpt[64];
+		for(int j = 0; j < g_iMaxOptions; j++)
+		{
+			g_SMAPI->Format(szOpt, sizeof(szOpt), "utils-opt-%i-%i", i, j);
+			if(j < (int)ex.vOptions.size())
+			{
+				g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, szOpt, "value", ex.vOptions[j].sText.c_str());
+				g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szOpt, "o-show", true);
+				g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szOpt, "utils-sel",
+					(j == iSel) ? true : false);
+			}
+			else
+			{
+				g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szOpt, "o-show", false);
+				g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szOpt, "utils-sel", false);
+			}
+		}
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-up",
+			(i >= 3) ? true : false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-open",
+			ex.bOpened ? true : false);
+	}
+	else
+	{
+		UTIL_SetLayoutItemKind(iSlot, szItem, "k-submenu");
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-on", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-open", false);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, szItem, "is-up", false);
+	}
+}
+
+static void UTIL_RenderLayoutContent(int iSlot, Menu& hMenu, MenuPlayer& hMenuPlayer)
+{
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-dialog", "title", hMenu.szTitle.c_str());
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-dialog", "desc",
+		g_szMenuDesc[iSlot].size() > 0 ? g_szMenuDesc[iSlot].c_str() : "");
+
+	int iPages = RoundToCeil(size(hMenu.hItems) / (double)g_iItemsPerPage);
+	if(iPages < 1) iPages = 1;
+	char szPage[64];
+	g_SMAPI->Format(szPage, sizeof(szPage), "%i / %i", hMenuPlayer.iList + 1, iPages);
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-page", "page", szPage);
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-prev", "utils-disabled",
+		hMenuPlayer.iList == 0 ? true : false);
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-next", "utils-disabled",
+		iPages <= hMenuPlayer.iList + 1 ? true : false);
+
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-back-anchor", "utils-hide",
+		hMenu.bBack ? false : true);
+
+	for(int i = 0; i < g_iItemsPerPage; i++)
+		UTIL_RenderLayoutItem(iSlot, hMenu, hMenuPlayer, i);
+}
+
+static void UTIL_CloseLayout(int iSlot, float flDelay)
+{
+	(void)flDelay;
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-dialog", "utils-dismissed", true);
+	g_pLayoutApi->SetInputCapture(iSlot, g_szLayoutName, false);
+}
+
+static void UTIL_EnsureLayout(int iSlot)
+{
+	if(g_mapHudLayouts[iSlot].find(g_szLayoutName) == g_mapHudLayouts[iSlot].end())
+		g_pLayoutApi->Create(iSlot, g_szLayoutName, "panorama/layout/custom_game/menu_ui.xml");
+}
+
+static void UTIL_DestroyLayout(int iSlot)
+{
+	g_pLayoutApi->Destroy(iSlot, g_szLayoutName, 0.0f);
+}
+
+void UtilsApi::ShowNotify(int iSlot, int iType, const char* szTitle, const char* szText, float flDuration, int iPos, const char* szChatFallback)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	if(!g_pLayoutApi) return;
+
+	if(g_bAllowDisableNotify && g_bNotifyDisabled[iSlot])
+	{
+		if(szChatFallback && szChatFallback[0])
+			g_pUtilsCore->PrintToChat(iSlot, "%s", szChatFallback);
+		return;
+	}
+
+	if(!g_bPanoramaMenu)
+	{
+		if(szChatFallback && szChatFallback[0])
+			g_pUtilsCore->PrintToChat(iSlot, "%s", szChatFallback);
+		return;
+	}
+
+	UTIL_EnsureLayout(iSlot);
+
+	static const char* const s_szTypeClass[] = { "ntf-success", "ntf-warning", "ntf-error" };
+	static const char* const s_szTypeIcon[]  = { "✓", "!", "✕" };
+	if(iType < 0 || iType > 2) iType = 0;
+
+	for(int i = 0; i < 3; i++)
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-notify", s_szTypeClass[i],
+			(i == iType) ? true : false);
+
+	static const char* const s_szPosClass[] = {
+		"ntf-pos-tr", "ntf-pos-tl", "ntf-pos-br", "ntf-pos-bl",
+		"ntf-pos-tc", "ntf-pos-c", "ntf-pos-bc", "ntf-pos-cl", "ntf-pos-cr"
+	};
+	const int iPosCount = (int)(sizeof(s_szPosClass) / sizeof(s_szPosClass[0]));
+	if(iPos < 0 || iPos >= iPosCount) iPos = 0;
+
+	for(int i = 0; i < iPosCount; i++)
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-notify", s_szPosClass[i],
+			(i == iPos) ? true : false);
+
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-notify", "ntficon", s_szTypeIcon[iType]);
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-notify", "ntftitle", szTitle ? szTitle : "");
+	g_pLayoutApi->SetDialogVariable(iSlot, g_szLayoutName, "utils-notify", "ntftext", szText ? szText : "");
+
+	g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-notify", "ntf-hidden", false);
+
+	int iGen = ++g_iNotifyGen[iSlot];
+	if(flDuration < 0.1f) flDuration = 0.1f;
+	new CTimer(flDuration, [iSlot, iGen]() {
+		if(g_iNotifyGen[iSlot] == iGen && g_pLayoutApi)
+			g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-notify", "ntf-hidden", true);
+		return -1.0f;
+	});
+}
+
+void UtilsApi::ShowNotifyAll(int iType, const char* szTitle, const char* szText, float flDuration, int iPos, const char* szChatFallback)
+{
+	for(int i = 0; i < 64; i++)
+	{
+		CCSPlayerController* pController = CCSPlayerController::FromSlot(i);
+		if(!pController || g_pPlayersApi->IsFakeClient(i)) continue;
+		ShowNotify(i, iType, szTitle, szText, flDuration, iPos, szChatFallback);
+	}
+}
+
+
+static void UTIL_HandleLayoutClick(int iSlot, const char* szLayoutName, const char* szButton)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	if(!szLayoutName || strcmp(szLayoutName, g_szLayoutName) != 0) return;
+	auto& hMenuPlayer = g_MenuPlayer[iSlot];
+	if(!hMenuPlayer.bEnabled) return;
+	if(g_iMenuType[iSlot] != 3) return;
+	auto& hMenu = hMenuPlayer.hMenu;
+	hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
+
+	if(strcmp(szButton, "utils-closeBtn") == 0)
+	{
+		if(hMenu.hFunc && hMenu.bExit) hMenu.hFunc("exit", "exit", 9, iSlot);
+		UTIL_CloseLayout(iSlot, 0.2f);
+		hMenuPlayer.clear();
+		g_iMenuItem[iSlot] = 1;
+		return;
+	}
+
+	if(strcmp(szButton, "utils-back") == 0)
+	{
+		if(hMenu.bBack && hMenu.hFunc) hMenu.hFunc("back", "back", 7, iSlot);
+		return;
+	}
+
+	if(strcmp(szButton, "utils-prev") == 0)
+	{
+		if(hMenuPlayer.iList > 0)
+		{
+			hMenuPlayer.iList--;
+			UTIL_RenderLayoutContent(iSlot, hMenu, hMenuPlayer);
+		}
+		return;
+	}
+	if(strcmp(szButton, "utils-next") == 0)
+	{
+		int iPages = RoundToCeil(size(hMenu.hItems) / (double)g_iItemsPerPage);
+		if(iPages > hMenuPlayer.iList + 1)
+		{
+			hMenuPlayer.iList++;
+			UTIL_RenderLayoutContent(iSlot, hMenu, hMenuPlayer);
+			if(hMenu.hFunc) hMenu.hFunc("next", "next", 8, iSlot);
+		}
+		return;
+	}
+
+	int iVis = -1, iOpt = -1;
+	if(sscanf(szButton, "utils-opt-%d-%d", &iVis, &iOpt) == 2 && iVis >= 0 && iVis < g_iItemsPerPage && iOpt >= 0)
+	{
+		int iIndex = hMenuPlayer.iList * g_iItemsPerPage + iVis;
+		if(iIndex < (int)hMenu.hItems.size())
+		{
+			auto& item = hMenu.hItems[iIndex];
+			if(iIndex >= (int)g_vItemExtra[iSlot].size()) return;
+			ItemExtra& ex = g_vItemExtra[iSlot][iIndex];
+			if(ex.iKind == ItemKind::SELECT && iOpt < (int)ex.vOptions.size())
+			{
+				ex.iSelected = iOpt;
+				ex.bOpened = false;
+				if(ex.hSelectFunc)
+					ex.hSelectFunc(item.sBack.c_str(), ex.vOptions[iOpt].sBack.c_str(), iOpt, iVis + 1, iSlot);
+				UTIL_RenderLayoutItem(iSlot, hMenu, hMenuPlayer, iVis);
+			}
+		}
+		return;
+	}
+
+	if(sscanf(szButton, "utils-item-%d", &iVis) == 1 && iVis >= 0 && iVis < g_iItemsPerPage)
+	{
+		int iIndex = hMenuPlayer.iList * g_iItemsPerPage + iVis;
+		if(iIndex >= (int)hMenu.hItems.size()) return;
+		auto& item = hMenu.hItems[iIndex];
+		if(item.iType == 2) return;
+		if(iIndex >= (int)g_vItemExtra[iSlot].size()) return;
+		ItemExtra& ex = g_vItemExtra[iSlot][iIndex];
+		if(ex.iKind == ItemKind::TOGGLE)
+		{
+			ex.bToggled = !ex.bToggled;
+			if(ex.hToggleFunc) ex.hToggleFunc(item.sBack.c_str(), ex.bToggled, iVis + 1, iSlot);
+			UTIL_RenderLayoutItem(iSlot, hMenu, hMenuPlayer, iVis);
+		}
+		else if(ex.iKind == ItemKind::SELECT)
+		{
+			bool bOpenNow = !ex.bOpened;
+			for(int k = 0; k < g_iItemsPerPage; k++)
+			{
+				int idx = hMenuPlayer.iList * g_iItemsPerPage + k;
+				if(idx < (int)g_vItemExtra[iSlot].size() && g_vItemExtra[iSlot][idx].iKind == ItemKind::SELECT)
+				{
+					bool bWant = (k == iVis) ? bOpenNow : false;
+					if(g_vItemExtra[iSlot][idx].bOpened != bWant)
+					{
+						g_vItemExtra[iSlot][idx].bOpened = bWant;
+						UTIL_RenderLayoutItem(iSlot, hMenu, hMenuPlayer, k);
+					}
+				}
+			}
+		}
+		else
+		{
+			if(item.iType == 1 && hMenu.hFunc)
+				hMenu.hFunc(item.sBack.c_str(), item.sText.c_str(), iVis + 1, iSlot);
+		}
+		return;
+	}
+}
+
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
@@ -1349,6 +1934,8 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true)
 void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, bool bReset = true)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
+	
+	g_iMenuType[iSlot] = UTIL_SanitizeMenuType(g_iMenuType[iSlot]);
     MenuPlayer& hMenuPlayer = g_MenuPlayer[iSlot];
 	if (hMenuPlayer.bEnabled && bClose && bReset) {
 		hMenuPlayer.clear();
@@ -1358,9 +1945,20 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 		g_iMenuItem[iSlot] = 1;
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
+		{
+			auto it = g_mapMenuDesc.find(&hMenu);
+			g_szMenuDesc[iSlot] = (it != g_mapMenuDesc.end()) ? it->second : std::string();
+		}
+		{
+			auto it = g_mapItemExtra.find(&hMenu);
+			if(it != g_mapItemExtra.end()) g_vItemExtra[iSlot] = it->second;
+			else g_vItemExtra[iSlot].clear();
+			g_vItemExtra[iSlot].resize(hMenuPlayer.hMenu.hItems.size());
+		}
 		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
 		if(hMenuPlayer.iList > 0) {
-			int iLists = RoundToCeil(size(hMenu.hItems) / 5.0);
+			double dPerPage = (g_iMenuType[iSlot] == 3) ? (double)g_iItemsPerPage : 5.0;
+			int iLists = RoundToCeil(size(hMenu.hItems) / dPerPage);
 			while (iLists < hMenuPlayer.iList + 1) {
 				hMenuPlayer.iList--;
 			}
@@ -1370,7 +1968,8 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			if(std::time(0) >= hMenuPlayer.iEnd)
 			{
 				hMenuPlayer.clear();
-				if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
+				if(g_iMenuType[iSlot] == 3) UTIL_CloseLayout(iSlot, 0.2f);
+				if(g_iMenuType[iSlot] >= 2 && g_bStopingUser) {
 					g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 				}
 				return -1.0f;
@@ -1391,6 +1990,11 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			}
 			return 0.0f;
 		});
+	}
+	if(g_iMenuType[iSlot] != 3 && g_mapHudLayouts[iSlot].find(g_szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-dialog", "utils-dismissed", true);
+		g_pLayoutApi->SetInputCapture(iSlot, g_szLayoutName, false);
 	}
 	if(g_iMenuType[iSlot] == 0)
 	{
@@ -1476,6 +2080,15 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 		}
 		g_TextMenuPlayer[iSlot] = sBuff;
 	}
+	else if(g_iMenuType[iSlot] == 3)
+	{
+		UTIL_EnsureLayout(iSlot);
+
+		UTIL_RenderLayoutContent(iSlot, hMenu, hMenuPlayer);
+
+		g_pLayoutApi->SetHasClass(iSlot, "utils-dialog", "utils-dialog", "utils-dismissed", false);
+		g_pLayoutApi->SetInputCapture(iSlot, "utils-dialog", true);
+	}
 }
 
 std::string MenusApi::escapeString(const std::string& input) {
@@ -1505,6 +2118,8 @@ void MenusApi::AddItemMenu(Menu& hMenu, const char* sBack, const char* sText, in
 	hItem.sBack = std::string(sBack);
 	hItem.sText = escapeString(sText);
 	hMenu.hItems.push_back(hItem);
+	
+	UTIL_PushItemExtra(hMenu);
 }
 
 void MenusApi::AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText, int iType = 1)
@@ -1516,12 +2131,82 @@ void MenusApi::AddRawItemMenu(Menu &hMenu, const char* sBack, const char* sText,
     hItem.sBack = std::string(sBack);
     hItem.sText = std::string(sText);
     hMenu.hItems.push_back(hItem);
+	UTIL_PushItemExtra(hMenu);
+}
+
+void MenusApi::AddToggleMenu(Menu& hMenu, const char* sBack, const char* sText, bool bDefault = false, MenuToggleCallbackFunc func = nullptr, int iType = 1)
+{
+	if (iType == 0) return;
+
+	Items hItem;
+	hItem.iType = iType;
+	hItem.sBack = std::string(sBack);
+	hItem.sText = escapeString(sText);
+	hMenu.hItems.push_back(hItem);
+	ItemExtra& ex = UTIL_PushItemExtra(hMenu);
+	ex.iKind = ItemKind::TOGGLE;
+	ex.bToggled = bDefault;
+	ex.hToggleFunc = func;
+}
+
+ItemRef MenusApi::AddSelectMenu(Menu& hMenu, const char* sBack, const char* sText, int iDefault = 0, MenuSelectCallbackFunc func = nullptr, int iType = 1)
+{
+	Items hItem;
+	hItem.iType = (iType == 0) ? 1 : iType;
+	hItem.sBack = std::string(sBack);
+	hItem.sText = escapeString(sText);
+	hMenu.hItems.push_back(hItem);
+	ItemExtra& ex = UTIL_PushItemExtra(hMenu);
+	ex.iKind = ItemKind::SELECT;
+	ex.iSelected = iDefault < 0 ? 0 : iDefault;
+	ex.bOpened = false;
+	ex.hSelectFunc = func;
+	return ItemRef{ &hMenu, (int)hMenu.hItems.size() - 1 };
+}
+
+void MenusApi::AddSelectOption(ItemRef hItem, const char* sOptionBack, const char* sOptionText)
+{
+	ItemExtra* ex = UTIL_ResolveItemExtra(hItem);
+	if (!ex) return;
+	SelectOption hOption;
+	hOption.sBack = std::string(sOptionBack);
+	hOption.sText = escapeString(sOptionText);
+	ex->vOptions.push_back(hOption);
+}
+
+void MenusApi::SetToggleState(ItemRef hItem, bool bState)
+{
+	ItemExtra* ex = UTIL_ResolveItemExtra(hItem);
+	if (ex) ex->bToggled = bState;
+}
+
+bool MenusApi::GetToggleState(ItemRef hItem)
+{
+	ItemExtra* ex = UTIL_ResolveItemExtra(hItem);
+	return ex ? ex->bToggled : false;
+}
+
+void MenusApi::SetSelectedOption(ItemRef hItem, int iOption)
+{
+	ItemExtra* ex = UTIL_ResolveItemExtra(hItem);
+	if (!ex) return;
+	if (ex->vOptions.empty()) { ex->iSelected = 0; return; }
+	if (iOption < 0) iOption = 0;
+	if (iOption >= (int)ex->vOptions.size()) iOption = (int)ex->vOptions.size() - 1;
+	ex->iSelected = iOption;
+}
+
+int MenusApi::GetSelectedOption(ItemRef hItem)
+{
+	ItemExtra* ex = UTIL_ResolveItemExtra(hItem);
+	return ex ? ex->iSelected : 0;
 }
 
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
-	if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
+	if(g_iMenuType[iSlot] == 3) UTIL_CloseLayout(iSlot, 0.2f);
+	if(g_iMenuType[iSlot] >= 2 && g_bStopingUser) {
 		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 	}
 	g_MenuPlayer[iSlot].clear();
@@ -1531,17 +2216,18 @@ void MenusApi::ClosePlayerMenu(int iSlot)
 
 void ClientPrintFilter(CPlayerBitVec filter, int msg_dest, const char *msg_name, const char *param1, const char *param2, const char *param3, const char *param4)
 {
-	INetworkMessageInternal *netmsg = g_pNetworkMessages->FindNetworkMessagePartial("TextMsg");
-	auto msg = netmsg->AllocateMessage()->ToPB<CUserMessageTextMsg>();
+	static INetworkMessageInternal *netmsg = g_pNetworkMessages->FindNetworkMessagePartial("CUserMessageTextMsg");
+	std::unique_ptr<CUserMessageTextMsg_t> msg(netmsg->AllocateMessage()->As<CUserMessageTextMsg_t>());
 	msg->set_dest(msg_dest);
 	msg->add_param(msg_name);
 	msg->add_param(param1);
 	msg->add_param(param2);
 	msg->add_param(param3);
 	msg->add_param(param4);
-
-	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(filter.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
-    delete msg;
+	
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(filter.Base()), netmsg, msg.get(), 0, NetChannelBufType_t::BUF_RELIABLE);
+	// msg->Send(filter);
+    // delete msg;
 }
 
 void UtilsApi::PrintToChatAll(const char *msg, ...)
@@ -1823,7 +2509,7 @@ void UtilsApi::RemoveEntity(CEntityInstance* pEntity)
 void UtilsApi::AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value, CEntityInstance *pActivator, CEntityInstance *pCaller)
 {
 	if(UTIL_AcceptInput)
-    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value, 0, 0LL);
+    	UTIL_AcceptInput(pEntity, szInputName, pActivator, pCaller, value);
 }
 
 void UtilsApi::NextFrame(std::function<void()> fn)
@@ -2161,12 +2847,11 @@ int PlayersApi::FindPlayer(const char* szName)
 
 void PlayersApi::SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> cvars)
 {
-	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
-	CNetMessage *msg = netmsg->AllocateMessage();
-	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
-	if (!cvarMsg) return;
+	static INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("CNETMsg_SetConVar");
+	std::unique_ptr<CNETMsg_SetConVar_t> msg(netmsg->AllocateMessage()->As<CNETMsg_SetConVar_t>());
+	
 	for (const auto& cvar : cvars) {
-		CMsg_CVars_CVar *cvarEntry = cvarMsg->mutable_convars()->add_cvars();
+		CMsg_CVars_CVar *cvarEntry = msg->mutable_convars()->add_cvars();
 		cvarEntry->set_name(cvar.szCvar.c_str());
 		cvarEntry->set_value(cvar.szValue.c_str());
 	}
@@ -2175,18 +2860,18 @@ void PlayersApi::SetConVars(std::vector<int> vPlayers, std::vector<FakeConVar> c
 	for (auto i : vPlayers) {
 		recipients.Set(i);
 	}
-	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
-
-	delete msg;
+	
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg.get(), 0, NetChannelBufType_t::BUF_RELIABLE);
+	// msg->Send(recipients);
+	// delete msg;
 }
 
 void PlayersApi::SetConVar(std::vector<int> vPlayers, const char* name, const char* value)
 {
-	INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("SetConVar");
-	CNetMessage *msg = netmsg->AllocateMessage();
-	CNETMsg_SetConVar *cvarMsg = dynamic_cast<CNETMsg_SetConVar *>(msg);
-	if (!cvarMsg) return;
-	CMsg_CVars_CVar *cvar = cvarMsg->mutable_convars()->add_cvars();
+	static INetworkMessageInternal* netmsg = g_pNetworkMessages->FindNetworkMessagePartial("CNETMsg_SetConVar");
+	std::unique_ptr<CNETMsg_SetConVar_t> msg(netmsg->AllocateMessage()->As<CNETMsg_SetConVar_t>());
+	
+	CMsg_CVars_CVar *cvar = msg->mutable_convars()->add_cvars();
 	cvar->set_name(name);
 	cvar->set_value(value);
 
@@ -2194,9 +2879,10 @@ void PlayersApi::SetConVar(std::vector<int> vPlayers, const char* name, const ch
 	for (auto i : vPlayers) {
 		recipients.Set(i);
 	}
-	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg, 0, NetChannelBufType_t::BUF_RELIABLE);
-
-	delete msg;
+	
+	g_gameEventSystem->PostEventAbstract(-1, false, ABSOLUTE_PLAYER_LIMIT, reinterpret_cast<const uint64*>(recipients.Base()), netmsg, msg.get(), 0, NetChannelBufType_t::BUF_RELIABLE);
+	// msg->Send(recipients);
+	// delete msg;
 }
 
 void PlayersApi::RemoveWeapons(int iSlot)
@@ -2323,6 +3009,114 @@ IGameEventListener2* PlayersApi::GetLegacyGameEventListener(int iSlot)
 	return nullptr;
 }
 
+void LayoutApi::Create(int iSlot, const char* szLayoutName, const char* szLayoutPath)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	CCSCustomHudLayout* layout = (CCSCustomHudLayout*)g_pUtilsApi->CreateEntityByName("custom_hud_layout", -1);
+	CEntityKeyValues* pKeyValues = new CEntityKeyValues();
+	pKeyValues->SetString("targetname", szLayoutName);
+	pKeyValues->SetString("layout", szLayoutPath);
+	g_pUtilsApi->DispatchSpawn(layout, pKeyValues);
+	g_mapHudLayouts[iSlot][szLayoutName] = CHandle<CCSCustomHudLayout>(layout);
+	g_pUtilsApi->SetTransmitState(layout->entindex(), false, {});
+	g_pUtilsApi->SetTransmitState(layout->entindex(), true, {iSlot});
+}
+
+void LayoutApi::Destroy(int iSlot, const char* szLayoutName, float flDelay)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	std::string key = szLayoutName;
+	if(g_mapHudLayouts[iSlot].find(key) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][key];
+		if(layout)
+		{
+			g_mapTransmitState[layout->entindex()].clear();
+			if(flDelay > 0.f)
+			{
+				new CTimer(flDelay, [iSlot, key]()
+				{
+					g_pUtilsApi->RemoveEntity(g_mapHudLayouts[iSlot][key]);
+					g_mapHudLayouts[iSlot].erase(key);
+					return -1.0f;
+				});
+			}
+			else
+			{
+				g_pUtilsApi->RemoveEntity(layout);
+				g_mapHudLayouts[iSlot].erase(key);
+			}
+		}
+	}
+}
+
+void LayoutApi::SetHasClass(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szClassName, bool bHasClass)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	if(g_mapHudLayouts[iSlot].find(szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][szLayoutName];
+		if(layout)
+		{
+			layout->SetHasClass(iSlot, szPanelId, szClassName, bHasClass);
+		}
+	}
+}
+
+void LayoutApi::SetInputCapture(int iSlot, const char* szLayoutName, bool bCapture)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	if(g_mapHudLayouts[iSlot].find(szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][szLayoutName];
+		if(layout)
+		{
+			layout->SetInputCaptureEnabled(iSlot, bCapture);
+		}
+	}	
+}
+
+bool LayoutApi::GetInputCapture(int iSlot, const char* szLayoutName)
+{
+	if(iSlot < 0 || iSlot >= 64) return false;
+	if(g_mapHudLayouts[iSlot].find(szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][szLayoutName];
+		if(layout)
+		{
+			return layout->GetInputCaptureEnabled(iSlot);
+		}
+	}
+	return false;
+}
+
+void LayoutApi::SetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName, CUtlString szValue)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+	if(g_mapHudLayouts[iSlot].find(szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][szLayoutName];
+		if(layout)
+		{
+			layout->SetDialogVariableString(iSlot, szPanelId, szVariableName, szValue);
+		}
+	}
+}
+
+const char* LayoutApi::GetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName)
+{
+	if(iSlot < 0 || iSlot >= 64) return "";
+	if(g_mapHudLayouts[iSlot].find(szLayoutName) != g_mapHudLayouts[iSlot].end())
+	{
+		CHandle<CCSCustomHudLayout> layout = g_mapHudLayouts[iSlot][szLayoutName];
+		if(layout)
+		{
+			return layout->GetDialogVariableString(iSlot, szPanelId, szVariableName);
+		}
+	}
+	return "";
+}
+
 const char* UtilsApi::GetVersion()
 {
 	return g_PLAPI->GetVersion();
@@ -2341,7 +3135,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.8.7";
+	return "1.9.0";
 }
 
 const char* Menus::GetDate()
