@@ -57,6 +57,10 @@ for sdk_target in MMSPlugin.sdk_targets:
 
   binary.sources += [
     'utils.cpp',
+    'menu_render.cpp',
+    'api_utils.cpp',
+    'api_players.cpp',
+    'api_layout.cpp',
     os.path.join('..', 'SchemaEntity', 'schemasystem.cpp'),
     os.path.join('..', 'SchemaEntity', 'module.cpp'),
     os.path.join('..', 'SchemaEntity', 'ctimer.cpp'),

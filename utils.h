@@ -14,6 +14,7 @@
 #include "vector.h"
 #include "entitykeyvalues.h"
 #include <deque>
+#include <stack>
 #include <functional>
 #include "utils.hpp"
 #include <utlstring.h>
@@ -30,6 +31,9 @@
 #include "ctimer.h"
 #include "funchook.h"
 #include "include/menus.h"
+#include "include/players.h"
+#include "include/utils.h"
+#include "include/layouts.h"
 #include "include/cookies.h"
 #include <map>
 #include <unordered_map>
@@ -38,6 +42,7 @@
 #include <array>
 #include <thread>
 #include <netmessages.h>
+#include <igamesystem.h>
 #include <usermessages.h>
 #include "customhud.pb.h"
 
@@ -94,10 +99,10 @@ public:
 	}
 };
 
-std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
-std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
+extern std::map<int, std::map<std::string, CommandCallback>> ConsoleCommands;
+extern std::map<int, std::map<std::string, CommandCallback>> ChatCommands;
 
-class Menus final : public ISmmPlugin, public IMetamodListener
+class Menus final : public ISmmPlugin, public IMetamodListener, public IEntityListener
 {
 public:
 	bool Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late);
@@ -124,13 +129,57 @@ private:
     void OnDispatchConCommand(ConCommandRef cmd, const CCommandContext& ctx, const CCommand& args);
 	void OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID );
 	void OnGameServerSteamAPIActivated();
+	void OnPreWorldUpdate(bool simulating);
+	void OnServerHibernationUpdate(bool bHibernating);
+	void OnGameServerSteamAPIDeactivated();
+	void OnHostNameChanged(const char *pHostname);
+	void OnPreFatalShutdown() const;
+	void OnUpdateWhenNotInGame(float flFrameTime);
+	void OnServerConVarChanged(const char *pVarName, const char *pValue);
+	void OnPostEventAbstract(CSplitScreenSlot nSlot, bool bLocalOnly, int nClientCount, const uint64 *clients, INetworkMessageInternal *pEvent, const CNetMessage *pData, unsigned long nSize, NetChannelBufType_t bufType);
+	bool OnSetClientListening(CPlayerSlot iReceiver, CPlayerSlot iSender, bool bListen);
+
+	void OnGameFramePost(bool simulating, bool bFirstTick, bool bLastTick);
+	void OnPreWorldUpdatePost(bool simulating);
+	void OnServerHibernationUpdatePost(bool bHibernating);
+	void OnGameServerSteamAPIActivatedPost();
+	void OnGameServerSteamAPIDeactivatedPost();
+	void OnHostNameChangedPost(const char *pHostname);
+	void OnPreFatalShutdownPost() const;
+	void OnUpdateWhenNotInGamePost(float flFrameTime);
+	void OnServerConVarChangedPost(const char *pVarName, const char *pValue);
+	void OnPostEventAbstractPost(CSplitScreenSlot nSlot, bool bLocalOnly, int nClientCount, const uint64 *clients, INetworkMessageInternal *pEvent, const CNetMessage *pData, unsigned long nSize, NetChannelBufType_t bufType);
+	bool OnSetClientListeningPost(CPlayerSlot iReceiver, CPlayerSlot iSender, bool bListen);
+	void OnDispatchConCommandPost(ConCommandRef cmd, const CCommandContext& ctx, const CCommand& args);
+	bool OnFireEventPost(IGameEvent* pEvent, bool bDontBroadcast);
 	void OnValidateAuthTicketHook(ValidateAuthTicketResponse_t *pResponse);
 	void OnClientConnected( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress, bool bFakePlayer );
 	bool OnClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason );
 	void OnClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid );
+	void OnClientActive( CPlayerSlot slot, bool bLoadGame, char const *pszName, uint64 xuid );
+	void OnClientFullyConnect( CPlayerSlot slot );
+	void OnClientSettingsChanged( CPlayerSlot slot );
+	void OnProcessUsercmds( CPlayerSlot slot, const CCLCMsg_Move_t &msg, bool paused );
+	void OnClientVoice( CPlayerSlot slot );
+	void OnClientCommandKeyValues( CPlayerSlot slot, KeyValues *pKeyValues );
+	bool OnProcessClientVoiceData( CPlayerSlot slot, void *pVoiceInfo );
 	void OnCheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntityIndices, bool bEnablePVSBits);
 	void OnClientSvcUserMessage( CPlayerSlot slot, int um_type, uint32 size, const void *buf );
 	bool Hook_OnTakeDamage_Alive(CTakeDamageInfoContainer *pInfoContainer);
+
+	void OnServerSideClientClientConnect(int socket, const char* pszName, int nUserID, INetChannel* pNetChannel, uint8 nConnectionTypeFlags, uint32 uChallengeNumber);
+	void OnCServerSideClientlientPerformDisconnection(ENetworkDisconnectionReason reason);
+	bool OnProcessTick(const CNETMsg_Tick_t& msg);
+	bool OnProcessStringCmd(const CNETMsg_StringCmd_t& msg);
+
+	void OnEntityCreated(CEntityInstance* pEntity) override;
+	void OnEntitySpawned(CEntityInstance* pEntity) override;
+	void OnEntityDeleted(CEntityInstance* pEntity) override;
+	void OnEntityParentChanged(CEntityInstance* pEntity, CEntityInstance* pNewParent) override;
+
+	void OnBuildGameSessionManifest(const EventBuildGameSessionManifest_t& msg);
+
+	std::stack<IGameEvent*> m_EventCopies;
 };
 
 class MenusApi : public IMenusApi {
@@ -181,6 +230,57 @@ public:
 	void ErrorLog(const char* msg, ...);
 	CTimer* CreateTimer(float flInterval, std::function<float()> func);
 	void RemoveTimer(CTimer* pTimer);
+	void TerminateRound(int reason, float delay, int64 teamid) override;
+	void AddPrecache(const char* szResource) override;
+
+	void AddCanAcquirePre(SourceMM::PluginId id, CanAcquireCallback callback) override {
+		m_CanAcquirePre[id].push_back(callback);
+	}
+	void AddCanAcquirePost(SourceMM::PluginId id, CanAcquireCallback callback) override {
+		m_CanAcquirePost[id].push_back(callback);
+	}
+
+	bool HasCanAcquirePre() const { return !m_CanAcquirePre.empty(); }
+
+	AcquireResult::Type SendCanAcquirePre(int iSlot, CPlayer_ItemServices* pItemServices, CEconItemView* pItemView, AcquireMethod::Type eMethod, bool& bHandled) {
+		bHandled = false;
+		int bestPriority = -1;
+		AcquireResult::Type priorityType = AcquireResult::Allowed;
+		AcquireResult::Type typedResult = AcquireResult::Allowed;
+		bool bHasTyped = false;
+		for (auto& item : m_CanAcquirePre) {
+			for (auto& cb : item.second) {
+				if (!cb) continue;
+				AcquireResultInfo info = cb(iSlot, pItemServices, pItemView, eMethod);
+				if (info.priority >= 0) {
+					if (info.priority > bestPriority) {
+						bestPriority = info.priority;
+						priorityType = info.type;
+					}
+				} else if (info.type != AcquireResult::Allowed && !bHasTyped) {
+					bHasTyped = true;
+					typedResult = info.type;
+				}
+			}
+		}
+		if (bestPriority >= 0) {
+			bHandled = true;
+			return priorityType;
+		}
+		if (bHasTyped) {
+			bHandled = true;
+			return typedResult;
+		}
+		return AcquireResult::Allowed;
+	}
+
+	void SendCanAcquirePost(int iSlot, CPlayer_ItemServices* pItemServices, CEconItemView* pItemView, AcquireMethod::Type eMethod) {
+		for (auto& item : m_CanAcquirePost) {
+			for (auto& cb : item.second) {
+				if (cb) cb(iSlot, pItemServices, pItemView, eMethod);
+			}
+		}
+	}
 	
 	void StartupServer(SourceMM::PluginId id, StartupCallback fn) override {
 		StartupHook[id].push_back(fn);
@@ -198,7 +298,7 @@ public:
 		GetGameRules[id].push_back(fn);
 	}
 
-	void SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset);
+	void SetStateChanged(CBaseEntity* entity, const char* sClassName, const char* sFieldName, int extraOffset = 0);
 
 	void AddChatListenerPre(SourceMM::PluginId id, CommandCallbackPre callback) override {
         ChatHookPre[id].push_back(callback);
@@ -217,6 +317,40 @@ public:
 		{
 			if (item.second[std::string(szName)]) {
 				item.second[std::string(szName)](szName, pEvent, bDontBroadcast);
+			}
+		}
+	}
+
+	void HookEventPre(SourceMM::PluginId id, const char* szName, EventHookPreCallback callback) override {
+		m_EventHookPre[id][std::string(szName)].push_back(callback);
+	}
+
+	void HookEventPost(SourceMM::PluginId id, const char* szName, EventHookPostCallback callback) override {
+		m_EventHookPost[id][std::string(szName)].push_back(callback);
+	}
+
+	EventHookResult SendEventHookPre(const char* szName, IGameEvent* pEvent, EventInfo* info) {
+		EventHookResult result = EventHookResult::Continue;
+		std::string name(szName);
+		for (auto& item : m_EventHookPre) {
+			auto it = item.second.find(name);
+			if (it == item.second.end()) continue;
+			for (auto& cb : it->second) {
+				if (!cb) continue;
+				EventHookResult r = cb(szName, pEvent, info);
+				if (r > result) result = r;
+			}
+		}
+		return result;
+	}
+
+	void SendEventHookPost(const char* szName, IGameEvent* pEvent, bool bDontBroadcast) {
+		std::string name(szName);
+		for (auto& item : m_EventHookPost) {
+			auto it = item.second.find(name);
+			if (it == item.second.end()) continue;
+			for (auto& cb : it->second) {
+				if (cb) cb(szName, pEvent, bDontBroadcast);
 			}
 		}
 	}
@@ -263,6 +397,133 @@ public:
 				}
 			}
 		}
+	}
+
+	void AddServerListener(SourceMM::PluginId id, IServerListener* pListener) override {
+		if (pListener)
+			m_ServerListeners[id] = pListener;
+	}
+
+	void SendServerStartup() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->StartupServer();
+	}
+	void SendServerMapEnd() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->MapEndHook();
+	}
+	void SendServerMapStart(const char* szMap) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->MapStartHook(szMap);
+	}
+	void SendServerPreWorldUpdate(bool bSimulating) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PreWorldUpdate(bSimulating);
+	}
+	void SendServerGameFrame(bool bSimulating, bool bFirstTick, bool bLastTick) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameFrame(bSimulating, bFirstTick, bLastTick);
+	}
+	void SendServerHibernationUpdate(bool bHibernating) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->ServerHibernationUpdate(bHibernating);
+	}
+	void SendServerSteamAPIActivated() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameServerSteamAPIActivated();
+	}
+	void SendServerSteamAPIDeactivated() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameServerSteamAPIDeactivated();
+	}
+	void SendServerHostNameChanged(const char* pHostname) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->OnHostNameChanged(pHostname);
+	}
+	void SendServerPreFatalShutdown() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PreFatalShutdown();
+	}
+	void SendServerUpdateWhenNotInGame(float flFrameTime) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->UpdateWhenNotInGame(flFrameTime);
+	}
+	void SendServerConVarChanged(const char* pVarName, const char* pValue) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->ServerConVarChanged(pVarName, pValue);
+	}
+	bool SendServerSetClientListening(int iReceiver, int iSender, bool bListen) {
+		bool bResult = bListen;
+		for (auto& item : m_ServerListeners)
+			if (item.second && !item.second->SetClientListening(iReceiver, iSender, bResult)) bResult = false;
+		return bResult;
+	}
+	void SendServerPostEvent(int nClientCount, const uint64 *clients, INetworkMessageInternal *pEvent, const CNetMessage *pData) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PostEvent(nClientCount, clients, pEvent, pData);
+	}
+	bool SendServerDispatchConCommand(int iSlot, const CCommand &args) {
+		bool bAllow = true;
+		for (auto& item : m_ServerListeners)
+			if (item.second && !item.second->DispatchConCommand(iSlot, args)) bAllow = false;
+		return bAllow;
+	}
+	void SendServerFireEvent(IGameEvent *pEvent, bool bDontBroadcast) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->FireEvent(pEvent, bDontBroadcast);
+	}
+
+	void SendServerPreWorldUpdatePost(bool bSimulating) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PreWorldUpdatePost(bSimulating);
+	}
+	void SendServerGameFramePost(bool bSimulating, bool bFirstTick, bool bLastTick) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameFramePost(bSimulating, bFirstTick, bLastTick);
+	}
+	void SendServerHibernationUpdatePost(bool bHibernating) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->ServerHibernationUpdatePost(bHibernating);
+	}
+	void SendServerSteamAPIActivatedPost() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameServerSteamAPIActivatedPost();
+	}
+	void SendServerSteamAPIDeactivatedPost() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->GameServerSteamAPIDeactivatedPost();
+	}
+	void SendServerHostNameChangedPost(const char* pHostname) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->OnHostNameChangedPost(pHostname);
+	}
+	void SendServerPreFatalShutdownPost() {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PreFatalShutdownPost();
+	}
+	void SendServerUpdateWhenNotInGamePost(float flFrameTime) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->UpdateWhenNotInGamePost(flFrameTime);
+	}
+	void SendServerConVarChangedPost(const char* pVarName, const char* pValue) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->ServerConVarChangedPost(pVarName, pValue);
+	}
+	void SendServerSetClientListeningPost(int iReceiver, int iSender, bool bListen) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->SetClientListeningPost(iReceiver, iSender, bListen);
+	}
+	void SendServerPostEventPost(int nClientCount, const uint64 *clients, INetworkMessageInternal *pEvent, const CNetMessage *pData) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->PostEventPost(nClientCount, clients, pEvent, pData);
+	}
+	void SendServerDispatchConCommandPost(int iSlot, const CCommand &args) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->DispatchConCommandPost(iSlot, args);
+	}
+	void SendServerFireEventPost(IGameEvent *pEvent, bool bDontBroadcast) {
+		for (auto& item : m_ServerListeners)
+			if (item.second) item.second->FireEventPost(pEvent, bDontBroadcast);
 	}
 
 	bool SendChatListenerPreCallback(int iSlot, const char* szContent, bool bTeam) {
@@ -381,6 +642,10 @@ public:
 		GetGameRules[id].clear();
 
 		HookEvents[id].clear();
+		m_EventHookPre[id].clear();
+		m_EventHookPost[id].clear();
+		m_CanAcquirePre[id].clear();
+		m_CanAcquirePost[id].clear();
 
 		OnTakeDamageHook[id].clear();
 		OnTakeDamageHookPre[id].clear();
@@ -389,6 +654,10 @@ public:
 
 		m_OnSettingsOpen[id].clear();
 		m_OnSettingsItem[id].clear();
+
+		m_EntityListeners.erase(id);
+
+		m_ServerListeners.erase(id);
 
 		ConsoleCommands[id].clear();
 		ChatCommands[id].clear();
@@ -486,6 +755,32 @@ public:
 		}
 	}
 
+	void AddEntityListener(SourceMM::PluginId id, IUtilsEntityListener* pListener) override {
+		if (pListener)
+			m_EntityListeners[id] = pListener;
+	}
+
+	void SendEntityCreated(CEntityInstance* pEntity) {
+		for (auto& item : m_EntityListeners)
+			if (item.second) item.second->OnEntityCreated(pEntity);
+	}
+	void SendEntitySpawned(CEntityInstance* pEntity) {
+		for (auto& item : m_EntityListeners)
+			if (item.second) item.second->OnEntitySpawned(pEntity);
+	}
+	void SendEntityDeleted(CEntityInstance* pEntity) {
+		for (auto& item : m_EntityListeners)
+			if (item.second) item.second->OnEntityDeleted(pEntity);
+	}
+	void SendEntityParentChanged(CEntityInstance* pEntity, CEntityInstance* pNewParent) {
+		for (auto& item : m_EntityListeners)
+			if (item.second) item.second->OnEntityParentChanged(pEntity, pNewParent);
+	}
+	void SendEntityCheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &unionTransmitEdicts2, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntityIndices, bool bEnablePVSBits) {
+		for (auto& item : m_EntityListeners)
+			if (item.second) item.second->CheckTransmit(pInfoInfoList, nInfoCount, unionTransmitEdicts, unionTransmitEdicts2, pNetworkables, pEntityIndicies, nEntityIndices, bEnablePVSBits);
+	}
+
 private:
     std::map<int, std::vector<CommandCallbackPre>> ChatHookPre;
     std::map<int, std::vector<CommandCallbackPost>> ChatHookPost;
@@ -496,6 +791,10 @@ private:
     std::map<int, std::vector<StartupCallback>> GetGameRules;
 
     std::map<int, std::map<std::string, EventCallback>> HookEvents;
+	std::map<int, std::map<std::string, std::vector<EventHookPreCallback>>> m_EventHookPre;
+	std::map<int, std::map<std::string, std::vector<EventHookPostCallback>>> m_EventHookPost;
+	std::map<int, std::vector<CanAcquireCallback>> m_CanAcquirePre;
+	std::map<int, std::vector<CanAcquireCallback>> m_CanAcquirePost;
 
 	std::map<int, std::vector<OnTakeDamageCallback>> OnTakeDamageHook;
 	std::map<int, std::vector<OnTakeDamagePreCallback>> OnTakeDamageHookPre;
@@ -504,6 +803,10 @@ private:
 
 	std::map<int, std::vector<OnSettingsOpenCallback>> m_OnSettingsOpen;
 	std::map<int, std::vector<OnSettingsItemCallback>> m_OnSettingsItem;
+
+	std::map<int, IUtilsEntityListener*> m_EntityListeners;
+
+	std::map<int, IServerListener*> m_ServerListeners;
 
 	std::deque<std::function<void()>> m_nextFrame;
 };
@@ -550,7 +853,7 @@ private:
 	const CSteamID* m_SteamID;
 };
 
-Player* m_Players[64];
+extern Player* m_Players[64];
 
 class PlayersApi : public IPlayersApi
 {
@@ -623,8 +926,14 @@ public:
 		m_OnClientAuthorized[id].push_back(callback);
 	}
 
+	void AddListener(SourceMM::PluginId id, IPlayerListener* pListener) override {
+		if (pListener)
+			m_Listeners[id] = pListener;
+	}
+
 	void ClearAllHooks(SourceMM::PluginId id) {
 		m_OnClientAuthorized[id].clear();
+		m_Listeners.erase(id);
 	}
 
 	void SendClientAuthCallback(int iSlot, uint64 steamID) {
@@ -636,6 +945,85 @@ public:
 				}
 			}
 		}
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->OnClientAuthorized(iSlot, steamID);
+	}
+
+	void OnClientConnected(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->OnClientConnected(iSlot);
+	}
+	bool ClientConnect(int iSlot) {
+		bool bAllow = true;
+		for (auto& item : m_Listeners)
+			if (item.second && !item.second->ClientConnect(iSlot)) bAllow = false;
+		return bAllow;
+	}
+	void ClientPutInServer(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientPutInServer(iSlot);
+	}
+	void ClientActive(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientActive(iSlot);
+	}
+	void ClientFullyConnect(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientFullyConnect(iSlot);
+	}
+	void ClientDisconnect(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientDisconnect(iSlot);
+	}
+	void ClientCommand(int iSlot, const CCommand &args) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientCommand(iSlot, args);
+	}
+	void ClientSettingsChanged(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientSettingsChanged(iSlot);
+	}
+	void ProcessUsercmds(int iSlot, const CCLCMsg_Move_t &msg, bool paused) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ProcessUsercmds(iSlot, msg, paused);
+	}
+	void ClientVoice(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientVoice(iSlot);
+	}
+	void ClientCommandKeyValues(int iSlot, KeyValues *pKeyValues) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientCommandKeyValues(iSlot, pKeyValues);
+	}
+	void ClientSvcUserMessage(int iSlot, int um_type, uint32 size, const void *buf) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->ClientSvcUserMessage(iSlot, um_type, size, buf);
+	}
+	bool ProcessClientVoiceData(int iSlot, void *pVoiceInfo) {
+		bool bAllow = true;
+		for (auto& item : m_Listeners)
+			if (item.second && !item.second->ProcessClientVoiceData(iSlot, pVoiceInfo)) bAllow = false;
+		return bAllow;
+	}
+	void OnClientSessionStart(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->OnClientSessionStart(iSlot);
+	}
+	void OnClientSessionEnd(int iSlot) {
+		for (auto& item : m_Listeners)
+			if (item.second) item.second->OnClientSessionEnd(iSlot);
+	}
+	bool ProcessTick(int iSlot, const CNETMsg_Tick_t& msg) {
+		bool bAllow = true;
+		for (auto& item : m_Listeners)
+			if (item.second && !item.second->ProcessTick(iSlot, msg)) bAllow = false;
+		return bAllow;
+	}
+	bool ProcessStringCmd(int iSlot, const CNETMsg_StringCmd_t& msg) {
+		bool bAllow = true;
+		for (auto& item : m_Listeners)
+			if (item.second && !item.second->ProcessStringCmd(iSlot, msg)) bAllow = false;
+		return bAllow;
 	}
 	
 	void CommitSuicide(int iSlot, bool bExplode, bool bForce);
@@ -680,6 +1068,7 @@ public:
 	bool UseClientCommand(int iSlot, const char* szCommand);
 private:
 	std::map<int, std::vector<OnClientAuthorizedCallback>> m_OnClientAuthorized;
+	std::map<int, IPlayerListener*> m_Listeners;
 };
 
 class LayoutApi : public ILayoutApi
@@ -692,6 +1081,13 @@ public:
 	void SetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName, CUtlString szValue);
 	const char* GetDialogVariable(int iSlot, const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName);
 	void Destroy(int iSlot, const char* szLayoutName, float flDelay);
+
+	void SetGlobalHasClass(const char* szLayoutName, CUtlString szPanelId, CUtlString szClassName, bool bHasClass) override;
+	void SetGlobalDialogVariable(const char* szLayoutName, CUtlString szPanelId, CUtlString szVariableName, CUtlString szValue) override;
+	void SetGlobalInputCapture(const char* szLayoutName, bool bCapture) override;
+
+	void CreateGlobal(const char* szLayoutName, const char* szLayoutPath) override;
+	void DestroyGlobal(const char* szLayoutName, float flDelay) override;
 	
 	void HookOnCustomHudClicked(SourceMM::PluginId id, OnCustomHudClicked callback) override {
 		m_OnCustomHudClicked[id].push_back(callback);
