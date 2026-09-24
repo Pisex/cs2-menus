@@ -582,26 +582,19 @@ void Menus::OnCheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, 
 	}
 }
 
-static std::string FindHudLayout(int iSlot, uint32 rawHandle)
+static std::string FindHudLayout(int iSlot, CEntityInstance* pLayout)
 {
-	if (rawHandle == 16777215)
+	if (!pLayout)
 		return "";
 
-	const int rawIndex = rawHandle & 0x7FFF;
 	for (auto& [name, hndl] : g_mapHudLayouts[iSlot])
-	{
-		if (!hndl.IsValid())
-			continue;
-		if (hndl.ToInt() == rawHandle || hndl.GetEntryIndex() == rawIndex)
-			return hndl.Get() != nullptr ? name : "";
-	}
+		if (hndl.Get() == pLayout)
+			return name;
+
 	for (auto& [name, hndl] : g_mapGlobalHudLayouts)
-	{
-		if (!hndl.IsValid())
-			continue;
-		if (hndl.ToInt() == rawHandle || hndl.GetEntryIndex() == rawIndex)
-			return hndl.Get() != nullptr ? name : "";
-	}
+		if (hndl.Get() == pLayout)
+			return name;
+
 	return "";
 }
 
@@ -618,11 +611,10 @@ void Menus::OnClientSvcUserMessage( CPlayerSlot slot, int um_type, uint32 size, 
 	const int iSlot = slot.Get();
 	const std::string sButtonId = msg.button_id();
 	const char* szButton = sButtonId.c_str();
-
-	std::string sLayoutId = FindHudLayout(iSlot, msg.custom_hud_layout());
+	CEntityInstance* pCustomLayout = CEntityHandle::FromPackedInt(msg.custom_hud_layout()).Get();
+	std::string sLayoutId = FindHudLayout(iSlot, pCustomLayout);
 	if (sLayoutId.empty())
 		return;
-
 	UTIL_HandleLayoutClick(iSlot, sLayoutId.c_str(), szButton);
 	g_pLayoutApi->SendCustomHudClickedCallback(iSlot, sLayoutId.c_str(), szButton);
 }
@@ -1404,6 +1396,7 @@ bool Menus::OnClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid,
 	pPlayer->SetIpAddress(ip);
 	pPlayer->SetConnected();
 	m_Players[slot.Get()] = pPlayer;
+	UTIL_ResetPlayerSlot(slot.Get());
 	if(!g_pPlayersApi->ClientConnect(slot.Get()))
 		RETURN_META_VALUE(MRES_SUPERCEDE, false);
 	RETURN_META_VALUE(MRES_IGNORED, true);
@@ -1768,14 +1761,7 @@ void Menus::OnClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason re
 	delete m_Players[iSlot];
 	m_Players[iSlot] = nullptr;
 
-	if (xuid == 0)
-    	return;
-
-	g_MenuPlayer[iSlot].clear();
-	g_TextMenuPlayer[iSlot] = "";
-	g_iMenuItem[iSlot] = 1;
-	g_szMenuDesc[iSlot].clear();
-	g_vItemExtra[iSlot].clear();
+	UTIL_ResetPlayerSlot(iSlot);
 }
 
 const char* UtilsApi::GetVersion()

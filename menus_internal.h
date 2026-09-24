@@ -157,4 +157,5 @@ int Hook_TakeDamage(CCSPlayer_DamageReactServices* pService, CTakeDamageInfo* in
 int  CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton);
 void UTIL_EnsureLayout(int iSlot);
 void UTIL_DestroyLayout(int iSlot);
+void UTIL_ResetPlayerSlot(int iSlot);
 void UTIL_HandleLayoutClick(int iSlot, const char* szLayoutName, const char* szButton);

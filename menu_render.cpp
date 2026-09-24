@@ -406,6 +406,31 @@ void UTIL_DestroyLayout(int iSlot)
 	(void)iSlot;
 }
 
+void UTIL_ResetPlayerSlot(int iSlot)
+{
+	if(iSlot < 0 || iSlot >= 64) return;
+
+	// Погасить панораму и снять input capture именно для этого слота,
+	// если глобальный layout уже создан. Нужно при переиспользовании слота:
+	// новый игрок получает индекс, где мог остаться стейт прошлого владельца.
+	if(g_pLayoutApi && g_mapGlobalHudLayouts.find(g_szLayoutName) != g_mapGlobalHudLayouts.end())
+	{
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-dialog", "utils-dismissed", true);
+		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-notify", "ntf-hidden", true);
+		g_pLayoutApi->SetInputCapture(iSlot, g_szLayoutName, false);
+	}
+
+	g_MenuPlayer[iSlot].clear();
+	g_TextMenuPlayer[iSlot].clear();
+	g_szMenuDesc[iSlot].clear();
+	g_vItemExtra[iSlot].clear();
+	g_iMenuItem[iSlot] = 1;
+	g_iMenuLastButtonInput[iSlot] = std::chrono::milliseconds(0);
+	g_iNotifyGen[iSlot]++; // инвалидировать висящие notify-таймеры прошлого игрока
+	g_iMenuType[iSlot] = UTIL_SanitizeMenuType(g_iMenuTypeDefault);
+	g_bNotifyDisabled[iSlot] = g_bNotifyDisabledDefault;
+}
+
 void UtilsApi::ShowNotify(int iSlot, int iType, const char* szTitle, const char* szText, float flDuration, int iPos, const char* szChatFallback)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
