@@ -428,6 +428,7 @@ void UTIL_ResetPlayerSlot(int iSlot)
 	g_iMenuLastButtonInput[iSlot] = std::chrono::milliseconds(0);
 	g_iNotifyGen[iSlot]++; // инвалидировать висящие notify-таймеры прошлого игрока
 	g_iMenuType[iSlot] = UTIL_SanitizeMenuType(g_iMenuTypeDefault);
+	g_iForcedMenuType[iSlot] = -1;
 	g_bNotifyDisabled[iSlot] = g_bNotifyDisabledDefault;
 }
 
@@ -503,7 +504,7 @@ void UTIL_HandleLayoutClick(int iSlot, const char* szLayoutName, const char* szB
 	if(!szLayoutName || strcmp(szLayoutName, g_szLayoutName) != 0) return;
 	auto& hMenuPlayer = g_MenuPlayer[iSlot];
 	if(!hMenuPlayer.bEnabled) return;
-	if(g_iMenuType[iSlot] != 3) return;
+	if(UTIL_EffectiveMenuType(iSlot) != 3) return;
 	auto& hMenu = hMenuPlayer.hMenu;
 	hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
 
@@ -512,6 +513,7 @@ void UTIL_HandleLayoutClick(int iSlot, const char* szLayoutName, const char* szB
 		if(hMenu.hFunc && hMenu.bExit) hMenu.hFunc("exit", "exit", 9, iSlot);
 		UTIL_CloseLayout(iSlot, 0.2f);
 		hMenuPlayer.clear();
+		g_iForcedMenuType[iSlot] = -1;
 		g_iMenuItem[iSlot] = 1;
 		return;
 	}
@@ -624,6 +626,9 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 		g_iMenuItem[iSlot] = 1;
 		hMenuPlayer.bEnabled = true;
 		hMenuPlayer.hMenu = hMenu;
+		// Применяем одноразовый форс-тип (для статических системных меню).
+		g_iForcedMenuType[iSlot] = g_iPendingForcedType;
+		g_iPendingForcedType = -1;
 		{
 			auto it = g_mapMenuDesc.find(&hMenu);
 			g_szMenuDesc[iSlot] = (it != g_mapMenuDesc.end()) ? it->second : std::string();
@@ -636,7 +641,7 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 		}
 		hMenuPlayer.iEnd = std::time(0) + g_iMenuTime;
 		if(hMenuPlayer.iList > 0) {
-			double dPerPage = (g_iMenuType[iSlot] == 3) ? (double)g_iItemsPerPage : 5.0;
+			double dPerPage = (UTIL_EffectiveMenuType(iSlot) == 3) ? (double)g_iItemsPerPage : 5.0;
 			int iLists = RoundToCeil(size(hMenu.hItems) / dPerPage);
 			while (iLists < hMenuPlayer.iList + 1) {
 				hMenuPlayer.iList--;
@@ -646,22 +651,25 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			if(!hMenuPlayer.bEnabled) return -1.0f;
 			if(std::time(0) >= hMenuPlayer.iEnd)
 			{
+				int iType = UTIL_EffectiveMenuType(iSlot);
 				hMenuPlayer.clear();
-				if(g_iMenuType[iSlot] == 3) UTIL_CloseLayout(iSlot, 0.2f);
-				if(g_iMenuType[iSlot] >= 2 && g_bStopingUser) {
+				g_iForcedMenuType[iSlot] = -1;
+				if(iType == 3) UTIL_CloseLayout(iSlot, 0.2f);
+				if(iType >= 2 && g_bStopingUser) {
 					g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 				}
 				return -1.0f;
 			}
-			if(g_iMenuType[iSlot] == 1 && g_TextMenuPlayer[iSlot].size() > 0) {
+			if(UTIL_EffectiveMenuType(iSlot) == 1 && g_TextMenuPlayer[iSlot].size() > 0) {
 				g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, g_TextMenuPlayer[iSlot].c_str());
 			}
-			if(g_iMenuType[iSlot] == 2) {
+			if(UTIL_EffectiveMenuType(iSlot) == 2) {
 				std::string szMenu = GetMenuText(iSlot);
 				if(szMenu.size() > 0) g_pUtilsCore->PrintToCenterHtml(iSlot, 0.0f, szMenu.c_str());
 				else {
 					hMenuPlayer.clear();
-					if(g_iMenuType[iSlot] == 2 && g_bStopingUser) {
+					g_iForcedMenuType[iSlot] = -1;
+					if(g_bStopingUser) {
 						g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 					}
 					return -1.0f;
@@ -670,12 +678,13 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			return 0.0f;
 		});
 	}
-	if(g_iMenuType[iSlot] != 3 && g_mapGlobalHudLayouts.find(g_szLayoutName) != g_mapGlobalHudLayouts.end())
+	int iType = UTIL_EffectiveMenuType(iSlot);
+	if(iType != 3 && g_mapGlobalHudLayouts.find(g_szLayoutName) != g_mapGlobalHudLayouts.end())
 	{
 		g_pLayoutApi->SetHasClass(iSlot, g_szLayoutName, "utils-dialog", "utils-dismissed", true);
 		g_pLayoutApi->SetInputCapture(iSlot, g_szLayoutName, false);
 	}
-	if(g_iMenuType[iSlot] == 0)
+	if(iType == 0)
 	{
 		char sBuff[128] = "\0";
 		int iCount = 0;
@@ -725,7 +734,7 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 			}
 		}
 	}
-	else if(g_iMenuType[iSlot] == 1)
+	else if(iType == 1)
 	{
 		std::string sBuff = "";
 		char sBuff2[256];
@@ -759,7 +768,7 @@ void MenusApi::DisplayPlayerMenu(Menu& hMenu, int iSlot, bool bClose = true, boo
 		}
 		g_TextMenuPlayer[iSlot] = sBuff;
 	}
-	else if(g_iMenuType[iSlot] == 3)
+	else if(iType == 3)
 	{
 		UTIL_EnsureLayout(iSlot);
 
@@ -884,11 +893,13 @@ int MenusApi::GetSelectedOption(ItemRef hItem)
 void MenusApi::ClosePlayerMenu(int iSlot)
 {
 	if(iSlot < 0 || iSlot >= 64) return;
-	if(g_iMenuType[iSlot] == 3) UTIL_CloseLayout(iSlot, 0.2f);
-	if(g_iMenuType[iSlot] >= 2 && g_bStopingUser) {
+	int iType = UTIL_EffectiveMenuType(iSlot);
+	if(iType == 3) UTIL_CloseLayout(iSlot, 0.2f);
+	if(iType >= 2 && g_bStopingUser) {
 		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_WALK);
 	}
 	g_MenuPlayer[iSlot].clear();
+	g_iForcedMenuType[iSlot] = -1;
 	g_TextMenuPlayer[iSlot] = "";
 	g_iMenuItem[iSlot] = 1;
 }

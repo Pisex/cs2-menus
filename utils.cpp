@@ -46,6 +46,8 @@ KeyValues* g_hKVData;
 
 int g_iMenuType[64];
 int g_iMenuItem[64];
+int g_iForcedMenuType[64];
+int g_iPendingForcedType = -1;
 std::chrono::milliseconds g_iMenuLastButtonInput[64];
 MenuPlayer g_MenuPlayer[64];
 std::string g_TextMenuPlayer[64];
@@ -87,6 +89,8 @@ bool g_bNotifyDisabledDefault;
 bool g_bNotifyDisabled[64];
 
 std::string g_szSettingsCommand;
+int g_iSettingsMenuType;
+int g_iMenuChangeMenuType;
 
 std::map<std::string, std::string> g_mapSounds;
 std::unordered_map<std::string, CHandle<CCSCustomHudLayout>> g_mapHudLayouts[64];
@@ -321,7 +325,7 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 		{
 			hMenuPlayer.iList = 0;
 			hMenuPlayer.bEnabled = false;
-			if(g_iMenuType[iSlot] == 0)
+			if(UTIL_EffectiveMenuType(iSlot) == 0)
 			{
 				for (size_t i = 0; i < 8; i++)
 				{
@@ -330,6 +334,7 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 			}
 			if(hMenu.hFunc) hMenu.hFunc("exit", "exit", 9, iSlot);
 			hMenuPlayer.hMenu.clear();
+			g_iForcedMenuType[iSlot] = -1;
 		}
 		else if(iButton == 8)
 		{
@@ -453,6 +458,13 @@ int UTIL_SanitizeMenuType(int iType)
 	return iType;
 }
 
+int UTIL_EffectiveMenuType(int iSlot)
+{
+	if(iSlot < 0 || iSlot >= 64) return g_iMenuTypeDefault;
+	if(g_iForcedMenuType[iSlot] >= 0) return UTIL_SanitizeMenuType(g_iForcedMenuType[iSlot]);
+	return g_iMenuType[iSlot];
+}
+
 int GetClientCookieMenuType(int iSlot)
 {
 	if(g_pPlayersApi->IsFakeClient(iSlot)) return g_iMenuTypeDefault;
@@ -511,6 +523,7 @@ void SettingMenu(int iSlot)
 			SettingMenu(iSlot);
 		}
 	});
+	g_iPendingForcedType = g_iMenuChangeMenuType;
 	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
@@ -550,6 +563,7 @@ void UtilsApi::OpenSettingsMenu(int iSlot)
 		}
 		g_pUtilsApi->SendHookOnSettingsItem(szBack, szFront, iItem, iSlot);
 	});
+	g_iPendingForcedType = g_iSettingsMenuType;
 	g_pMenusCore->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
@@ -748,6 +762,8 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_szSettingsCommand = g_kvCore->GetString("SettingsCommand", "!settings");
 		g_bAllowDisableNotify = g_kvCore->GetBool("AllowDisableNotify", true);
 		g_bNotifyDisabledDefault = g_kvCore->GetBool("NotifyDisabledDefault", false);
+		g_iSettingsMenuType = g_kvCore->GetInt("SettingsMenuType", -1);
+		g_iMenuChangeMenuType = g_kvCore->GetInt("MenuChangeMenuType", -1);
 
 		g_mapSounds.clear();
 		const char* szBackSound = g_kvCore->GetString("sound_back", "");
@@ -1095,39 +1111,39 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	});
 
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_1"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 1)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 1)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_2"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 2)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 2)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_3"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 3)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 3)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_4"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 4)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 4)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_5"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 5)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 5)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_6"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 6)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 6)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_7"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 7)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 7)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_8"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 8)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 8)) return true;
 		return false;
 	});
 	g_pUtilsApi->RegCommand(g_PLID, {"mm_9"}, {}, [](int iSlot, const char* szContent){
-		if(g_iMenuType[iSlot] < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
+		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
 		return false;
 	});
 
@@ -1657,10 +1673,10 @@ void Menus::OnDispatchConCommand(ConCommandRef cmdHandle, const CCommandContext&
 			auto tokens = SplitStringBySpace(message);
 			if (!tokens.empty())
 			{
-				if (containsOnlyDigits(tokens[0]))
-				{
-					if (g_iMenuType[iSlot] < 2)
+					if (containsOnlyDigits(tokens[0]))
 					{
+						if (UTIL_EffectiveMenuType(iSlot) < 2)
+						{
 						int iButton = atoi(tokens[0].c_str());
 						if (CheckActionMenu(iSlot, pController, iButton))
 							RETURN_META(MRES_SUPERCEDE);

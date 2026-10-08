@@ -69,6 +69,10 @@ extern std::string g_szServerID;
 extern bool        g_bAllowDisableNotify;
 extern bool        g_bNotifyDisabledDefault;
 extern std::string g_szSettingsCommand;
+// Статический тип меню для системных меню. -1 - использовать тип игрока,
+// иначе принудительно отрисовывать меню указанным типом.
+extern int         g_iSettingsMenuType;    // меню настроек (SettingsCommand/mm_settings)
+extern int         g_iMenuChangeMenuType;  // меню выбора типа меню (MenuChangeCommand)
 
 extern std::map<std::string, std::string> g_mapSounds;
 extern std::vector<std::string>           g_vCommandEater;
@@ -78,6 +82,10 @@ extern std::vector<std::string>           g_mapPrecache;
 
 extern int                       g_iMenuType[64];
 extern int                       g_iMenuItem[64];
+// Форсированный тип отрисовки открытого сейчас меню (-1 - использовать g_iMenuType).
+extern int                       g_iForcedMenuType[64];
+// Одноразовое значение форс-типа, которое применит следующий DisplayPlayerMenu.
+extern int                       g_iPendingForcedType;
 extern std::chrono::milliseconds g_iMenuLastButtonInput[64];
 extern MenuPlayer                g_MenuPlayer[64];
 extern std::string               g_TextMenuPlayer[64];
@@ -149,6 +157,8 @@ std::string Colorizer(std::string str);
 bool containsOnlyDigits(const std::string& str);
 std::vector<std::string> SplitStringBySpace(const std::string& input);
 int  UTIL_SanitizeMenuType(int iType);
+// Эффективный тип отрисовки для слота: форс-тип, если он задан, иначе g_iMenuType.
+int  UTIL_EffectiveMenuType(int iSlot);
 ItemExtra& UTIL_PushItemExtra(Menu& hMenu);
 ItemExtra* UTIL_ResolveItemExtra(const ItemRef& ref);
 
