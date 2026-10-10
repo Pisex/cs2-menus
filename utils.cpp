@@ -601,6 +601,12 @@ static std::string FindHudLayout(int iSlot, CEntityInstance* pLayout)
 	if (!pLayout)
 		return "";
 
+	// pLayout приходит из входящего protobuf (индекс entity от клиента),
+	// поэтому сверяем класс, прежде чем трактовать его как HUD-лейаут.
+	const char* szClass = pLayout->GetClassname();
+	if (!szClass || strcmp(szClass, "custom_hud_layout") != 0)
+		return "";
+
 	for (auto& [name, hndl] : g_mapHudLayouts[iSlot])
 		if (hndl.Get() == pLayout)
 			return name;
@@ -645,6 +651,29 @@ void Menus::OnEntitySpawned(CEntityInstance* pEntity)
 
 void Menus::OnEntityDeleted(CEntityInstance* pEntity)
 {
+	// Убираем хэндлы удаляемого custom_hud_layout из кэшей, чтобы после
+	// переиспользования entity-слота мы не обратились к чужому entity как
+	// к HUD-лейауту (иначе краш в CUtlVector-полях схемы).
+	if(pEntity)
+	{
+		const char* szClass = pEntity->GetClassname();
+		if(szClass && strcmp(szClass, "custom_hud_layout") == 0)
+		{
+			for(int i = 0; i < 64; i++)
+			{
+				for(auto it = g_mapHudLayouts[i].begin(); it != g_mapHudLayouts[i].end(); )
+				{
+					if(it->second.Get() == pEntity) it = g_mapHudLayouts[i].erase(it);
+					else ++it;
+				}
+			}
+			for(auto it = g_mapGlobalHudLayouts.begin(); it != g_mapGlobalHudLayouts.end(); )
+			{
+				if(it->second.Get() == pEntity) it = g_mapGlobalHudLayouts.erase(it);
+				else ++it;
+			}
+		}
+	}
 	g_pUtilsApi->SendEntityDeleted(pEntity);
 }
 

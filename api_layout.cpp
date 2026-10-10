@@ -1,17 +1,40 @@
 #include "utils.h"
 #include "menus_internal.h"
 
+// Проверяем, что по хэндлу всё ещё живёт именно custom_hud_layout.
+// CHandle::Get() валидирует серийник, но при переиспользовании entity-слота
+// (wraparound серийника) может вернуться живой entity другого типа. Чтение
+// его памяти как CUtlVector-полей CCSCustomHudLayout приводит к крашу
+// (CUtlVector overflow / невалидный индекс). Поэтому дополнительно сверяем класс.
+static CCSCustomHudLayout* UTIL_ValidateLayout(CCSCustomHudLayout* layout)
+{
+	if(!layout)
+		return nullptr;
+	const char* szClass = layout->GetClassname();
+	if(!szClass || strcmp(szClass, "custom_hud_layout") != 0)
+		return nullptr;
+	return layout;
+}
+
 static CCSCustomHudLayout* UTIL_ResolveLayout(int iSlot, const char* szLayoutName)
 {
 	if(iSlot >= 0 && iSlot < 64)
 	{
 		auto it = g_mapHudLayouts[iSlot].find(szLayoutName);
 		if(it != g_mapHudLayouts[iSlot].end() && it->second)
-			return it->second;
+		{
+			CCSCustomHudLayout* layout = UTIL_ValidateLayout(it->second.Get());
+			if(layout)
+				return layout;
+		}
 	}
 	auto itg = g_mapGlobalHudLayouts.find(szLayoutName);
 	if(itg != g_mapGlobalHudLayouts.end() && itg->second)
-		return itg->second;
+	{
+		CCSCustomHudLayout* layout = UTIL_ValidateLayout(itg->second.Get());
+		if(layout)
+			return layout;
+	}
 	return nullptr;
 }
 
