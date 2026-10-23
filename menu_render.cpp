@@ -40,7 +40,7 @@ std::string GetMenuText(int iSlot)
 	if(pPawn && pPawn->IsAlive() && g_bStopingUser && pPlayerPawn->m_nActualMoveType() == MOVETYPE_WALK) {
 		g_pPlayersApi->SetMoveType(iSlot, MOVETYPE_NONE);
 	}
-	int buttons = pMovementServices->m_nButtons().m_pButtonStates()[0];
+	int buttons = pMovementServices->m_nButtons().m_pButtonStates[0];
 	auto now = std::chrono::system_clock::now();
 	std::chrono::milliseconds iTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 

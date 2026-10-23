@@ -242,6 +242,28 @@ public:
 
 	bool HasCanAcquirePre() const { return !m_CanAcquirePre.empty(); }
 
+	void AddProcessUsercmdsPre(SourceMM::PluginId id, ProcessUsercmdsCallback callback) override {
+		m_ProcessUsercmdsPre[id].push_back(callback);
+	}
+	void AddProcessUsercmdsPost(SourceMM::PluginId id, ProcessUsercmdsCallback callback) override {
+		m_ProcessUsercmdsPost[id].push_back(callback);
+	}
+	bool HasProcessUsercmdsHooks() const { return !m_ProcessUsercmdsPre.empty() || !m_ProcessUsercmdsPost.empty(); }
+
+	bool SendProcessUsercmdsPre(int iSlot, CCSPlayerController* pController, void* pCmds, int iNumCmds, bool bPaused, float fMargin) {
+		bool bContinue = true;
+		for (auto& item : m_ProcessUsercmdsPre)
+			for (auto& cb : item.second)
+				if (cb && !cb(iSlot, pController, pCmds, iNumCmds, bPaused, fMargin))
+					bContinue = false;
+		return bContinue;
+	}
+	void SendProcessUsercmdsPost(int iSlot, CCSPlayerController* pController, void* pCmds, int iNumCmds, bool bPaused, float fMargin) {
+		for (auto& item : m_ProcessUsercmdsPost)
+			for (auto& cb : item.second)
+				if (cb) cb(iSlot, pController, pCmds, iNumCmds, bPaused, fMargin);
+	}
+
 	AcquireResult::Type SendCanAcquirePre(int iSlot, CPlayer_ItemServices* pItemServices, CEconItemView* pItemView, AcquireMethod::Type eMethod, bool& bHandled) {
 		bHandled = false;
 		int bestPriority = -1;
@@ -646,6 +668,8 @@ public:
 		m_EventHookPost[id].clear();
 		m_CanAcquirePre[id].clear();
 		m_CanAcquirePost[id].clear();
+		m_ProcessUsercmdsPre.erase(id);
+		m_ProcessUsercmdsPost.erase(id);
 
 		OnTakeDamageHook[id].clear();
 		OnTakeDamageHookPre[id].clear();
@@ -795,6 +819,8 @@ private:
 	std::map<int, std::map<std::string, std::vector<EventHookPostCallback>>> m_EventHookPost;
 	std::map<int, std::vector<CanAcquireCallback>> m_CanAcquirePre;
 	std::map<int, std::vector<CanAcquireCallback>> m_CanAcquirePost;
+	std::map<int, std::vector<ProcessUsercmdsCallback>> m_ProcessUsercmdsPre;
+	std::map<int, std::vector<ProcessUsercmdsCallback>> m_ProcessUsercmdsPost;
 
 	std::map<int, std::vector<OnTakeDamageCallback>> OnTakeDamageHook;
 	std::map<int, std::vector<OnTakeDamagePreCallback>> OnTakeDamageHookPre;
@@ -819,6 +845,7 @@ public:
 		m_bConnected = false;
 		m_bInGame = false;
 		m_SteamID = nullptr;
+		m_UnauthenticatedSteamID = nullptr;
 	}
 	bool IsFakeClient() { return m_bFakeClient; }
 	bool IsAuthenticated() { return m_bAuthenticated; }
@@ -827,7 +854,7 @@ public:
 	
 	const char* GetIpAddress() { return m_strIp.c_str(); }
 
-	uint64 GetUnauthenticatedSteamId64() { return m_UnauthenticatedSteamID->ConvertToUint64(); }
+	uint64 GetUnauthenticatedSteamId64() { return m_UnauthenticatedSteamID ? m_UnauthenticatedSteamID->ConvertToUint64() : 0; }
 	const CSteamID* GetUnauthenticatedSteamId() { return m_UnauthenticatedSteamID; }
 
 	uint64 GetSteamId64() { return m_SteamID?m_SteamID->ConvertToUint64():0; }
@@ -924,6 +951,21 @@ public:
 	
 	void HookOnClientAuthorized(SourceMM::PluginId id, OnClientAuthorizedCallback callback) override {
 		m_OnClientAuthorized[id].push_back(callback);
+	}
+
+	std::string SteamID64ToSteamID2(uint64 iSteamID64) override {
+		if ((iSteamID64 >> 32) != 0x01100001ULL) return std::string();
+		uint32 iAccountID = (uint32)(iSteamID64 & 0xFFFFFFFFULL);
+		if (iAccountID == 0) return std::string();
+		return "STEAM_1:" + std::to_string(iAccountID & 1) + ":" + std::to_string(iAccountID >> 1);
+	}
+
+	std::string GetSteamID2(int iSlot, bool bRequireAuth) override {
+		if (iSlot < 0 || iSlot >= 64 || m_Players[iSlot] == nullptr || m_Players[iSlot]->IsFakeClient())
+			return std::string();
+		const CSteamID* pSteamID = bRequireAuth ? m_Players[iSlot]->GetSteamId() : m_Players[iSlot]->GetUnauthenticatedSteamId();
+		if (!pSteamID) return std::string();
+		return SteamID64ToSteamID2(pSteamID->ConvertToUint64());
 	}
 
 	void AddListener(SourceMM::PluginId id, IPlayerListener* pListener) override {

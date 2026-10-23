@@ -23,6 +23,7 @@ class CNetMessage;
 class CCommand;
 class CPlayer_ItemServices;
 class CEconItemView;
+class CCSPlayerController;
 
 #define UTILS_INTERFACE "IUtilsApi"
 
@@ -109,6 +110,11 @@ typedef std::function<bool(int iSlot, CTakeDamageInfoContainer *&pInfoContainer)
 typedef std::function<bool(int iSlot, CTakeDamageInfo *pInfo)> OnTakeDamagePreCallback;
 typedef std::function<bool(int iSlot)> OnHearingClientCallback;
 typedef std::function<void(const char* szMap)> MapStartCallback;
+// Хук CCSPlayerController::ProcessUsercmds (обработка пачки usercmd игрока за тик).
+// pCmds - массив CCSGOUserCmd (numcmds штук), можно менять кнопки/углы прямо в нём.
+// Pre: верните false, чтобы игра НЕ обработала эти команды (весь вызов отменяется).
+// Post: вызывается после игры (если не отменено), возвращаемое значение игнорируется.
+typedef std::function<bool(int iSlot, CCSPlayerController* pController, void* pCmds, int iNumCmds, bool bPaused, float fMargin)> ProcessUsercmdsCallback;
 
 // Вызывается при открытии меню настроек позволяет сторонним плагинам добавить свои пункты
 typedef std::function<void(int iSlot, Menu& hMenu)> OnSettingsOpenCallback;
@@ -282,4 +288,7 @@ public:
     // максимальный priority. Если приоритетов нет, побеждает любой не-Allowed тип.
     virtual void AddCanAcquirePre(SourceMM::PluginId id, CanAcquireCallback callback) = 0;
     virtual void AddCanAcquirePost(SourceMM::PluginId id, CanAcquireCallback callback) = 0;
+
+    virtual void AddProcessUsercmdsPre(SourceMM::PluginId id, ProcessUsercmdsCallback callback) = 0;
+    virtual void AddProcessUsercmdsPost(SourceMM::PluginId id, ProcessUsercmdsCallback callback) = 0;
 };

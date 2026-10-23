@@ -38,12 +38,18 @@ def ResolveMMSRoot():
 
 mms_root = ResolveMMSRoot()
 
-if not builder.options.hl2sdk_manifests:
+# Shared manifests live in samples/hl2sdk-manifests, one copy for every plugin.
+# --hl2sdk-manifests is only a fallback when the shared folder is missing.
+hl2sdk_manifests = os.path.join(builder.sourcePath, '..', 'hl2sdk-manifests')
+if not os.path.isfile(os.path.join(hl2sdk_manifests, 'SdkHelpers.ambuild')) and builder.options.hl2sdk_manifests:
+  hl2sdk_manifests = os.path.join(builder.sourcePath, builder.options.hl2sdk_manifests)
+if not os.path.isfile(os.path.join(hl2sdk_manifests, 'SdkHelpers.ambuild')):
   raise Exception('Could not find a source copy of HL2SDK manifests')
-hl2sdk_manifests = builder.options.hl2sdk_manifests
+hl2sdk_manifests = os.path.relpath(hl2sdk_manifests, builder.sourcePath)
 
 SdkHelpers = builder.Eval(os.path.join(hl2sdk_manifests, 'SdkHelpers.ambuild'), {
-  'Project': 'metamod'
+  'Project': 'metamod',
+  'ManifestsPath': os.path.join(builder.sourcePath, hl2sdk_manifests),
 })
 
 class MMSPluginConfig(object):
@@ -238,6 +244,12 @@ class MMSPluginConfig(object):
       elif cxx.family == 'clang':
         cxx.linkflags += ['-lgcc_eh']
       cxx.linkflags += ['-static-libstdc++']
+      # Drop unreferenced functions/data from the final .so
+      cxx.cflags += ['-ffunction-sections', '-fdata-sections']
+      cxx.linkflags += ['-Wl,--gc-sections']
+      # AMBuild adds -g3 even in release, strip DWARF from optimized non-debug builds
+      if builder.options.opt == '1' and builder.options.debug != '1':
+        cxx.linkflags += ['-Wl,--strip-debug']
     elif cxx.target.platform == 'windows':
       cxx.defines += ['WIN32', '_WINDOWS']
 
@@ -260,15 +272,22 @@ class MMSPluginConfig(object):
     for other_sdk in self.sdk_manifests:
       cxx.defines += ['SE_{}={}'.format(other_sdk['define'], other_sdk['code'])]
 
-    cxx.defines += ['META_IS_SOURCE2']
+    cxx.defines += ['META_IS_SOURCE2', 'CS2']
     binary.sources += [
       os.path.join(sdk['path'], 'public', 'tier0', 'memoverride.cpp'),
+      os.path.join(sdk['path'], 'public', 'networkvar.cpp'),
       os.path.join(sdk['path'], 'tier1', 'generichash.cpp'),
       os.path.join(sdk['path'], 'entity2', 'entitysystem.cpp'),
+      os.path.join(sdk['path'], 'entity2', 'entityhandle.cpp'),
+      os.path.join(sdk['path'], 'entity2', 'concreteentitylist.cpp'),
       os.path.join(sdk['path'], 'entity2', 'entityidentity.cpp'),
       os.path.join(sdk['path'], 'entity2', 'entitykeyvalues.cpp'),
-      os.path.join(sdk['path'], 'tier1', 'convar.cpp'),
-      os.path.join(sdk['path'], 'tier1', 'keyvalues3.cpp'),
+      os.path.join(sdk['path'], 'entity2', 'entitypulse.cpp'),
+      os.path.join(sdk['path'], 'entity2', 'entitypulsecallcontext.cpp'),
+      os.path.join(sdk['path'], 'tier0_perproject', 'convar.cpp'),
+      os.path.join(sdk['path'], 'tier0_perproject', 'convarref.cpp'),
+      os.path.join(sdk['path'], 'tier0_perproject', 'concommandbase.cpp'),
+      os.path.join(sdk['path'], 'kv3lib', 'keyvalues3.cpp'),
     ]
 
     SdkHelpers.configureCxx(context, binary, sdk)

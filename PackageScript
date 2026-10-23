@@ -4,12 +4,13 @@ import os
 builder.SetBuildFolder('package')
 
 metamod_folder = builder.AddFolder(os.path.join('addons', 'metamod'))
-bin_folder_path = os.path.join('addons', MMSPlugin.plugin_name)
+# utils lives directly in addons/ (addons/utils.so); other plugins go to addons/plugins/ (autoloaded)
+bin_folder_path = 'addons'
 bin_folder = builder.AddFolder(bin_folder_path)
 
 for cxx in MMSPlugin.all_targets:
   if cxx.target.arch == 'x86_64':
-    bin64_folder_path = os.path.join('addons', MMSPlugin.plugin_name)
+    bin64_folder_path = 'addons'
     bin64_folder = builder.AddFolder(bin64_folder_path)
 
 pdb_list = []
@@ -43,3 +44,4 @@ builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'core.cfg'), configs
 builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'signatures.ini'), configs_folder)
 builder.AddCopy(os.path.join(builder.sourcePath, 'configs', 'precacher.ini'), configs_folder)
 configs_folder = builder.AddFolder(os.path.join('addons', 'logs'))
+builder.AddFolder(os.path.join('addons', 'plugins'))

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "utils.h"
 #include "menus_internal.h"
+#include "plugin_autoload.h"
 #include "metamod_oslink.h"
 #include "schemasystem/schemasystem.h"
 #include <serversideclient.h>
@@ -35,12 +36,6 @@ int g_iCollisionRulesChanged = 0;
 int g_iTeleport = 0;
 int g_iRespawn = 0;
 int g_iDropWeapon = 0;
-
-CGameEntitySystem* GameEntitySystem()
-{
-	g_pGameEntitySystem = *reinterpret_cast<CGameEntitySystem**>(reinterpret_cast<uintptr_t>(g_pGameResourceServiceServer) + WIN_LINUX(0x58, 0x50));
-	return g_pGameEntitySystem;
-}
 
 KeyValues* g_hKVData;
 
@@ -89,6 +84,8 @@ bool g_bNotifyDisabledDefault;
 bool g_bNotifyDisabled[64];
 
 std::string g_szSettingsCommand;
+std::string g_szAutoloadDir = "addons/plugins";
+std::string g_szPluginsRestartCmd = "quit";
 int g_iSettingsMenuType;
 int g_iMenuChangeMenuType;
 
@@ -148,7 +145,7 @@ SH_DECL_HOOK3_void(IServerGameClients, ProcessUsercmds, SH_NOATTRIB, 0, CPlayerS
 SH_DECL_HOOK1_void(IServerGameClients, ClientVoice, SH_NOATTRIB, 0, CPlayerSlot);
 SH_DECL_HOOK2_void(IServerGameClients, ClientCommandKeyValues, SH_NOATTRIB, 0, CPlayerSlot, KeyValues*);
 SH_DECL_HOOK4_void(IServerGameClients, ClientSvcUserMessage, SH_NOATTRIB, 0, CPlayerSlot, int, uint32, const void *);
-SH_DECL_HOOK2(IServerGameClients, ProcessClientVoiceData, SH_NOATTRIB, 0, bool, CPlayerSlot, void *);
+// SH_DECL_HOOK2(IServerGameClients, ProcessClientVoiceData, SH_NOATTRIB, 0, bool, CPlayerSlot, void *);
 
 // ISource2Server
 SH_DECL_HOOK1_void(IServerGameDLL, PreWorldUpdate, SH_NOATTRIB, 0, bool);
@@ -197,6 +194,7 @@ void (*UTIL_AcceptInput)(CEntityInstance* pThis, const char* pInputName, CEntity
 bool (*UTIL_TraceShape)(CPhysicsQuery*, const Ray_t* ray, const Vector* start, const Vector* end, CTraceFilter* filter, trace_t* trace) = nullptr;
 void (*UTIL_TerminateRound)(CGameRules* pGameRules, float delay, unsigned int reason, int64 teamid) = nullptr;
 AcquireResult::Type (*UTIL_CanAcquire)(CPlayer_ItemServices* pItemServices, CEconItemView* pItemView, AcquireMethod::Type eMethod, uint* pLimit) = nullptr;
+void* (*UTIL_ProcessUsercmds)(CCSPlayerController* pController, void *cmds, int numcmds, bool paused, float margin) = nullptr;
 
 using namespace DynLibUtils;
 
@@ -205,6 +203,7 @@ funchook_t* m_SayTeamHook;
 funchook_t* m_TakeDamageHook;
 funchook_t* m_IsHearingClientHook;
 funchook_t* m_CanAcquireHook;
+funchook_t* m_ProcessUsercmdsHook;
 
 std::vector<std::string> SplitStringBySpace(const std::string& input);
 bool containsOnlyDigits(const std::string& str) {
@@ -376,6 +375,22 @@ int CheckActionMenu(int iSlot, CCSPlayerController* pController, int iButton)
 bool FASTCALL IsHearingClient(void* serverClient, int index)
 {
 	return g_pUtilsApi->SendHookOnHearingClient(index)?UTIL_IsHearingClient(serverClient, index):false;
+}
+
+void* ProcessUsercmdsHook(CCSPlayerController* pController, void *cmds, int numcmds, bool paused, float margin)
+{
+	if(!pController || !g_pUtilsApi->HasProcessUsercmdsHooks())
+		return UTIL_ProcessUsercmds(pController, cmds, numcmds, paused, margin);
+	int iSlot = pController->GetPlayerSlot();
+	if(iSlot < 0 || iSlot >= 64)
+		return UTIL_ProcessUsercmds(pController, cmds, numcmds, paused, margin);
+
+	if(!g_pUtilsApi->SendProcessUsercmdsPre(iSlot, pController, cmds, numcmds, paused, margin))
+		return nullptr;
+
+	void* pResult = UTIL_ProcessUsercmds(pController, cmds, numcmds, paused, margin);
+	g_pUtilsApi->SendProcessUsercmdsPost(iSlot, pController, cmds, numcmds, paused, margin);
+	return pResult;
 }
 
 AcquireResult::Type CanAcquireHook(CPlayer_ItemServices* pItemServices, CEconItemView* pItemView, AcquireMethod::Type eMethod, uint* pLimit)
@@ -738,13 +753,13 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 	SH_ADD_HOOK(IServerGameClients, ProcessUsercmds, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessUsercmds), false);
 	SH_ADD_HOOK(IServerGameClients, ClientVoice, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientVoice), false);
 	SH_ADD_HOOK(IServerGameClients, ClientCommandKeyValues, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientCommandKeyValues), false);
-	SH_ADD_HOOK(IServerGameClients, ProcessClientVoiceData, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessClientVoiceData), false);
+	// SH_ADD_HOOK(IServerGameClients, ProcessClientVoiceData, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessClientVoiceData), false);
 	
 	ConVar_Register(FCVAR_RELEASE | FCVAR_CLIENT_CAN_EXECUTE | FCVAR_GAMEDLL);
 
 	if (late)
 	{
-		g_pEntitySystem = GameEntitySystem();
+		g_pEntitySystem = g_pGameEntitySystem = GameEntitySystem();
 		gpGlobals = engine->GetServerGlobals();
 	}
 
@@ -789,6 +804,8 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		g_iSoundType = g_kvCore->GetInt("sound_type", 0);
 		g_szServerID = g_kvCore->GetString("server_id", "0");
 		g_szSettingsCommand = g_kvCore->GetString("SettingsCommand", "!settings");
+		g_szAutoloadDir = g_kvCore->GetString("PluginsDir", "addons/plugins");
+		g_szPluginsRestartCmd = g_kvCore->GetString("PluginsRestartCmd", "quit");
 		g_bAllowDisableNotify = g_kvCore->GetBool("AllowDisableNotify", true);
 		g_bNotifyDisabledDefault = g_kvCore->GetBool("NotifyDisabledDefault", false);
 		g_iSettingsMenuType = g_kvCore->GetInt("SettingsMenuType", -1);
@@ -1122,6 +1139,21 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		}
 	}
 
+	const char* pszProcessUsercmds = g_kvSigs->GetString("ProcessUsercmds");
+	if(pszProcessUsercmds && pszProcessUsercmds[0]) {
+		UTIL_ProcessUsercmds = libserver.FindPattern(pszProcessUsercmds).RCast< decltype(UTIL_ProcessUsercmds) >();
+		if (!UTIL_ProcessUsercmds)
+		{
+			g_pUtilsApi->ErrorLog("[%s] Failed to find function to get ProcessUsercmds", g_PLAPI->GetLogTag());
+		}
+		else
+		{
+			m_ProcessUsercmdsHook = funchook_create();
+			funchook_prepare(m_ProcessUsercmdsHook, (void**)&UTIL_ProcessUsercmds, (void*)ProcessUsercmdsHook);
+			funchook_install(m_ProcessUsercmdsHook, 0);
+		}
+	}
+
 	new CTimer(1.0f, []()
 	{
 		for(int i = 0; i < 64; i++)
@@ -1175,6 +1207,12 @@ bool Menus::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool la
 		if(UTIL_EffectiveMenuType(iSlot) < 2) if(CheckActionMenu(iSlot, CCSPlayerController::FromSlot(iSlot), 9)) return true;
 		return false;
 	});
+
+	if (Autoload_SyncVDF(g_szAutoloadDir.c_str(), {"utils"}) > 0 && !g_szPluginsRestartCmd.empty())
+	{
+		ConColorMsg(Color(255, 165, 0, 255), "[utils] Plugins: .vdf files changed, restarting server (%s)\n", g_szPluginsRestartCmd.c_str());
+		engine->ServerCommand((g_szPluginsRestartCmd + "\n").c_str());
+	}
 
 	return true;
 }
@@ -1287,7 +1325,7 @@ bool Menus::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(IServerGameClients, ProcessUsercmds, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessUsercmds), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientVoice, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientVoice), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientCommandKeyValues, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientCommandKeyValues), false);
-	SH_REMOVE_HOOK(IServerGameClients, ProcessClientVoiceData, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessClientVoiceData), false);
+	// SH_REMOVE_HOOK(IServerGameClients, ProcessClientVoiceData, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnProcessClientVoiceData), false);
 	SH_REMOVE_HOOK(IServerGameClients, ClientSvcUserMessage, g_pSource2GameClients, SH_MEMBER(this, &Menus::OnClientSvcUserMessage), false);
 
 	if(g_iOnTakeDamageAliveId) SH_REMOVE_HOOK_ID(g_iOnTakeDamageAliveId);
@@ -1300,6 +1338,7 @@ bool Menus::Unload(char *error, size_t maxlen)
 	if(m_SayTeamHook) funchook_destroy(m_SayTeamHook);
 	if(m_TakeDamageHook) funchook_destroy(m_TakeDamageHook);
 	if(m_CanAcquireHook) funchook_destroy(m_CanAcquireHook);
+	if(m_ProcessUsercmdsHook) { funchook_uninstall(m_ProcessUsercmdsHook, 0); funchook_destroy(m_ProcessUsercmdsHook); }
 
 	ConVar_Unregister();
 	
@@ -1773,7 +1812,7 @@ void Menus::StartupServer(const GameSessionConfiguration_t& config, ISource2Worl
 	g_Offsets.clear();
 	g_ChainOffsets.clear();
 	g_pGameRules = nullptr;
-	g_pEntitySystem = GameEntitySystem();
+	g_pEntitySystem = g_pGameEntitySystem = GameEntitySystem();
 	gpGlobals = getGlobalVars();
 	if(g_bHasTicked) {
 		g_pUtilsApi->SendHookMapEnd();
@@ -1827,7 +1866,7 @@ const char* Menus::GetLicense()
 
 const char* Menus::GetVersion()
 {
-	return "1.9.1";
+	return "1.9.2";
 }
 
 const char* Menus::GetDate()

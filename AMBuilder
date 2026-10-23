@@ -57,6 +57,7 @@ for sdk_target in MMSPlugin.sdk_targets:
 
   binary.sources += [
     'utils.cpp',
+    'plugin_autoload.cpp',
     'menu_render.cpp',
     'api_utils.cpp',
     'api_players.cpp',
